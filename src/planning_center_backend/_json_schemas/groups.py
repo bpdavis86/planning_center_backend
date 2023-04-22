@@ -32,17 +32,17 @@ class GroupData(msgspec.Struct, forbid_unknown_fields=True):
 
 
 class GroupAttributes(msgspec.Struct, forbid_unknown_fields=True):
-    contact_email: Optional[str]
-    created_at: datetime
+    name: str
     description: Optional[str]
+    schedule: Optional[str]
+    contact_email: Optional[str]
+    memberships_count: int
+    created_at: datetime
     enrollment_open: bool
     enrollment_strategy: str
     events_visibility: str
-    header_image: dict
     location_type_preference: str
-    memberships_count: int
-    name: str
     public_church_center_web_url: Optional[str]
-    schedule: Optional[str]
+    header_image: dict
     archived_at: Optional[datetime] = None
     virtual_location_url: Optional[str] = None
