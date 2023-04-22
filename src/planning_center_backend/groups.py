@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Union, Optional, Sequence
 import msgspec
 import pandas as pd
 
+from ._exceptions import RequestError
 from ._json_schemas.groups import GroupSchema, GroupsSchema, GroupData, GroupAttributes
 from . import _urls as urls
 
@@ -60,12 +61,12 @@ class GroupsApiProvider:
     def __init__(self, _backend: PlanningCenterBackend):
         self._backend = _backend
 
-    def create(self, name: str) -> GroupIdentifier:
+    def create(self, name: str) -> GroupObject:
         """
         Create a new Planning Center Small Group
 
         :param name: Name of new group
-        :return: Identifier of new group resource
+        :return: API object for group
         """
         if not self._backend.logged_in:
             raise ValueError('User is not logged in')
@@ -84,7 +85,8 @@ class GroupsApiProvider:
         # get the new group uri
         group_location = r.headers['Location']
 
-        return GroupIdentifier.from_url(group_location)
+        id_ = GroupIdentifier.from_url(group_location)
+        return GroupObject(id_=id_, _api=self, _backend=self._backend)
 
     def delete(self, group: GroupIdentifier):
         """
@@ -102,9 +104,13 @@ class GroupsApiProvider:
         return msgspec.json.decode(txt, type=GroupSchema)
 
     def _get_all_raw(self) -> Sequence[GroupData]:
+        # The groups URL api returns JSON in chunks
+        # For every request, if links contains 'next', that is the URL
+        # of next groups chunk.
         groups = []
         url = urls.GROUPS_API_BASE_URL
 
+        # Loop all the group chunks while we are pointed to a next URL
         while url:
             txt = self._backend.get_json(url)
             section = msgspec.json.decode(txt, type=GroupsSchema)
@@ -118,15 +124,20 @@ class GroupsApiProvider:
         return groups
 
     def get(self, id_: Union[int, GroupIdentifier]) -> GroupObject:
+        """
+        Get a specific group access object by id.
+        :param id_: Group id number or identifier object
+        :return: Group accessor object
+        """
         if isinstance(id_, int):
             id_ = GroupIdentifier.from_id(id_)
         raw = self._get_raw(id_)
-        return GroupObject(id_=id_, _api=self, _data=raw.data)
+        return GroupObject(id_=id_, _api=self, _backend=self._backend, _data=raw.data)
 
     def get_all(self) -> GroupList:
         groups_raw = self._get_all_raw()
         return GroupList([
-            GroupObject(int(g.id), _api=self, _data=g)
+            GroupObject(int(g.id), _api=self, _backend=self._backend, _data=g)
             for g in groups_raw
         ])
 
@@ -136,25 +147,54 @@ class GroupObject:
             self,
             id_: Union[int, GroupIdentifier],
             _api: GroupsApiProvider,
+            _backend: PlanningCenterBackend,
             _data: Optional[GroupData] = None,
     ):
         if isinstance(id_, int):
             id_ = GroupIdentifier.from_id(id_)
         self.id_ = id_
         self._api = _api
+        self._backend = _backend
         self._data = None
 
         if _data is not None:
             self._data = _data
-        else:
-            self.refresh()
+        # data will be lazy load
 
-    def refresh(self):
-        raw = self._api.get(self.id_)
-        self._data = raw._data
+        self._deleted = False
+
+    def refresh(self) -> None:
+        """
+        Refresh group attributes from server.
+        :return: None
+        """
+        if not self._deleted:
+            try:
+                raw = self._api.get(self.id_)
+                self._data = raw._data
+            except RequestError as e:
+                if e.response.status_code == 404:
+                    self._deleted = True
+                else:
+                    raise e
+
+    @property
+    def deleted(self) -> bool:
+        return self._deleted
 
     @property
     def attributes(self) -> Optional[GroupAttributes]:
+        if self._deleted:
+            return None
+
+        if self._data is None:
+            # lazy load group data if needed
+            self.refresh()
+            if self._deleted:
+                return None
+
+        # if we could not load them for some reason return None
+        # may want an error here instead
         if self._data is not None:
             return self._data.attributes
         else:
@@ -163,12 +203,28 @@ class GroupObject:
     def __repr__(self):
         attr = self.attributes
         if attr is None:
-            return f'GroupObject(id_={self.id_.id_}, <no attributes>)'
-        return f'GroupObject(id_={self.id_.id_}, name="{self.attributes.name}")'
+            return f'GroupObject(id_={self.id_.id_}, deleted={self.deleted})'
+        return (
+            f'GroupObject(id_={self.id_.id_}, name="{self.attributes.name}, deleted={self.deleted}")'
+        )
+
+    def delete(self) -> bool:
+        """
+        Delete the given group
+        :return: If deletion was successful
+        """
+        url = self.id_.frontend_url
+        csrf_token = self._backend.get_csrf_token(
+            urljoin(url + '/', 'settings')
+        )
+        self._backend.delete(url, csrf_token=csrf_token)
+
+        self.refresh()
+        return self.deleted
 
 
 class GroupList(list[GroupObject]):
-    def to_df(self):
+    def to_df(self) -> pd.DataFrame:
         """
         Get group descriptions as a pandas dataframe
         :return: Dataframe description of groups in list

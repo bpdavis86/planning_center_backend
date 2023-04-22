@@ -4,9 +4,11 @@ from typing import Optional
 
 import requests
 from bs4 import BeautifulSoup
+from cachetools import cached, TTLCache
 from requests import Session
 
 from . import _urls as urls
+from ._exceptions import RequestError
 from .groups import GroupsApiProvider
 
 
@@ -20,6 +22,22 @@ def _get_csrf_headers(csrf_token: str) -> dict[str, str]:
         'x-csrf-token': csrf_token,
         'x-requested-with': 'XMLHttpRequest'
     }
+
+
+# Cache CSRF tokens for one minute
+CSRF_CACHE_TIME = 60  # sec
+
+
+@cached(cache=TTLCache(maxsize=1024, ttl=CSRF_CACHE_TIME))
+def _get_cached_csrf_token(session: requests.Session, url: str) -> str:
+    # get a valid csrf token for AJAX spoofing
+    # this will not work without the 'accept' header (*/* does not work)
+    r_groups = session.get(url, headers=dict(accept='text/html'))
+    if not r_groups.ok:
+        raise RequestError('Could not fetch page {url} for csrf_token', response=r_groups)
+    soup = BeautifulSoup(r_groups.text, 'html.parser')
+    csrf_token = soup.find(attrs={'name': 'csrf-token'}).attrs['content']
+    return csrf_token
 
 
 class PlanningCenterBackend:
@@ -46,13 +64,12 @@ class PlanningCenterBackend:
         authenticity_token = soup.find(attrs={'name': 'authenticity_token'}).attrs['value']
         return authenticity_token
 
-    def get_csrf_token(self, frontend_url: str) -> str:
-        # get a valid csrf token for AJAX spoofing
-        # this will not work without the 'accept' header (*/* does not work)
-        r_groups = self._session.get(frontend_url, headers=dict(accept='text/html'))
-        soup = BeautifulSoup(r_groups.text, 'html.parser')
-        csrf_token = soup.find(attrs={'name': 'csrf-token'}).attrs['content']
-        return csrf_token
+    def get_csrf_token(self, frontend_url: str, no_cache: bool = False) -> str:
+        if no_cache:
+            # remove key from cache if present
+            _get_cached_csrf_token.cache.pop((self._session, frontend_url), None)
+
+        return _get_cached_csrf_token(self._session, frontend_url)
 
     @property
     def logged_in(self) -> bool:
@@ -101,7 +118,7 @@ class PlanningCenterBackend:
     def get_json(self, url: str):
         r = self._session.get(url, headers=dict(accept='application/json'))
         if not r.ok:
-            raise ValueError(f'Could not get content at {url}')
+            raise RequestError(f'Could not get JSON content at {url}', response=r)
         return r.text
 
     def post(self, url: str, data: dict, csrf_token: Optional[str] = None) -> requests.Response:
@@ -120,7 +137,7 @@ class PlanningCenterBackend:
 
         # check result
         if not r.ok:
-            raise RuntimeError(f'Post to {url} failed, Response {r.status_code}')
+            raise RequestError(f'Post to {url} failed, Response {r.status_code}', response=r)
 
         return r
 
@@ -132,6 +149,6 @@ class PlanningCenterBackend:
 
         # check result
         if not r.ok:
-            raise RuntimeError(f'Delete of {url} failed, Response {r.status_code}')
+            raise RequestError(f'Delete of {url} failed, Response {r.status_code}', response=r)
 
         return r
