@@ -6,12 +6,26 @@ from typing import Optional
 import msgspec
 
 
+# region Base Objects
+
 class _ApiBase(msgspec.Struct):
     data: dict
     included: list
     meta: dict
     links: Optional[dict] = None
 
+
+class _DataBase(msgspec.Struct, forbid_unknown_fields=True):
+    type: str
+    id: str
+    attributes: dict
+    relationships: dict
+    links: dict
+
+
+# endregion
+
+# region Groups
 
 class GroupSchema(_ApiBase):
     # schema for https://api.planningcenteronline.com/groups/v2/groups/<id>
@@ -23,15 +37,7 @@ class GroupsSchema(_ApiBase):
     data: list[GroupData]
 
 
-class _ObjectData(msgspec.Struct, forbid_unknown_fields=True):
-    type: str
-    id: str
-    attributes: dict
-    relationships: dict
-    links: dict
-
-
-class GroupData(_ObjectData):
+class GroupData(_DataBase):
     attributes: GroupAttributes
 
 
@@ -52,12 +58,16 @@ class GroupAttributes(msgspec.Struct, forbid_unknown_fields=True):
     virtual_location_url: Optional[str] = None
 
 
+# endregion
+
+# region Membership
+
 class MembershipsSchema(_ApiBase):
     # schema for https://api.planningcenteronline.com/groups/v2/groups/<id>/memberships
     data: list[MembershipData]
 
 
-class MembershipData(_ObjectData):
+class MembershipData(_DataBase):
     attributes: MembershipAttributes
 
 
@@ -73,11 +83,15 @@ class MembershipAttributes(msgspec.Struct, forbid_unknown_fields=True):
     avatar_url: str
 
 
+# endregion
+
+# region Events
+
 class EventsSchema(_ApiBase):
     data: list[EventData]
 
 
-class EventData(_ObjectData):
+class EventData(_DataBase):
     attributes: EventAttributes
 
 
@@ -99,14 +113,19 @@ class EventAttributes(msgspec.Struct, forbid_unknown_fields=True):
     visitors_count: Optional[int]
 
 
+# endregion
+
+# region Tags
 class TagsSchema(_ApiBase):
     data: list[TagData]
 
 
-class TagData(_ObjectData):
+class TagData(_DataBase):
     attributes: TagAttributes
 
 
 class TagAttributes(msgspec.Struct, forbid_unknown_fields=True):
     name: str
     position: int
+
+# endregion
