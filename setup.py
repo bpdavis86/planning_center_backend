@@ -19,6 +19,6 @@ setup(
     author="Benjamin Davis",
     packages=find_packages('src', exclude=["tests", ".github"]),
     package_dir={"": 'src'},
-    install_requires=['requests', 'beautifulsoup4'],
+    install_requires=['requests', 'beautifulsoup4', 'msgspec', 'pandas'],
     extras_require={"test": ['pytest']},
 )

@@ -1,0 +1,11 @@
+LOGIN_NEW_URL = 'https://login.planningcenteronline.com/login/new'
+LOGIN_POST_URL = 'https://login.planningcenteronline.com/login'
+LOGOUT_URL = 'https://login.planningcenteronline.com/logout'
+HOME_ROOT_URL = 'https://home.planningcenteronline.com'
+API_NETLOC = 'api.planningcenteronline.com'
+GROUPS_NETLOC = 'groups.planningcenteronline.com'
+TOPBAR_URL = 'https://api.planningcenteronline.com/people/v2/me/topbar'
+
+GROUPS_ROOT_URL = 'https://groups.planningcenteronline.com'
+GROUPS_BASE_URL = 'https://groups.planningcenteronline.com/groups'
+GROUPS_API_BASE_URL = 'https://api.planningcenteronline.com/groups/v2/groups'
