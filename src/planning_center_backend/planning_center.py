@@ -30,12 +30,16 @@ CSRF_CACHE_TIME = 60  # sec
 
 @cached(cache=TTLCache(maxsize=1024, ttl=CSRF_CACHE_TIME))
 def _get_cached_csrf_token(session: requests.Session, url: str) -> str:
+    return _get_csrf_token(session, url)
+
+
+def _get_csrf_token(session: requests.Session, url: str) -> str:
     # get a valid csrf token for AJAX spoofing
     # this will not work without the 'accept' header (*/* does not work)
-    r_groups = session.get(url, headers=dict(accept='text/html'))
-    if not r_groups.ok:
-        raise RequestError('Could not fetch page {url} for csrf_token', response=r_groups)
-    soup = BeautifulSoup(r_groups.text, 'html.parser')
+    r = session.get(url, headers=dict(accept='text/html'))
+    if not r.ok:
+        raise RequestError(f'Could not fetch page {url} for csrf_token', response=r)
+    soup = BeautifulSoup(r.text, 'html.parser')
     csrf_token = soup.find(attrs={'name': 'csrf-token'}).attrs['content']
     return csrf_token
 
@@ -64,12 +68,29 @@ class PlanningCenterBackend:
         authenticity_token = soup.find(attrs={'name': 'authenticity_token'}).attrs['value']
         return authenticity_token
 
-    def get_csrf_token(self, frontend_url: str, no_cache: bool = False) -> str:
-        if no_cache:
+    def get_csrf_token(
+            self,
+            frontend_url: str,
+            *,
+            no_cache: bool = False,
+            force_refresh: bool = False,
+    ) -> str:
+        """
+        Get a CSRF token from given frontend url.
+
+        :param frontend_url: URL of page from which to fetch token
+        :param no_cache: Disable use of caching, default False
+        :param force_refresh: Force expiration of current cache key for this url, default False
+        :return: Token value
+        """
+        if force_refresh:
             # remove key from cache if present
             _get_cached_csrf_token.cache.pop((self._session, frontend_url), None)
 
-        return _get_cached_csrf_token(self._session, frontend_url)
+        if no_cache:
+            return _get_csrf_token(self._session, frontend_url)
+        else:
+            return _get_cached_csrf_token(self._session, frontend_url)
 
     @property
     def logged_in(self) -> bool:
@@ -121,14 +142,31 @@ class PlanningCenterBackend:
             raise RequestError(f'Could not get JSON content at {url}', response=r)
         return r.text
 
-    def post(self, url: str, data: dict, csrf_token: Optional[str] = None) -> requests.Response:
+    def post(
+            self,
+            url: str,
+            data: dict,
+            *,
+            csrf_frontend_url: Optional[str] = None,
+            csrf_no_cache: bool = False,
+            csrf_auto_retry: bool = True,
+    ) -> requests.Response:
         # do group creation
-        if csrf_token is not None:
+        if csrf_frontend_url is not None:
+            csrf_token = self.get_csrf_token(csrf_frontend_url, no_cache=csrf_no_cache)
             r = self._session.post(
                 url,
                 data=data,
                 headers=_get_csrf_headers(csrf_token)
             )
+            if not r.ok and not csrf_no_cache and csrf_auto_retry:
+                # retry request after expiring cached token
+                csrf_token = self.get_csrf_token(csrf_frontend_url, force_refresh=True)
+                r = self._session.post(
+                    url,
+                    data=data,
+                    headers=_get_csrf_headers(csrf_token)
+                )
         else:
             r = self._session.post(
                 url,
@@ -141,9 +179,21 @@ class PlanningCenterBackend:
 
         return r
 
-    def delete(self, url: str, csrf_token: Optional[str] = None) -> requests.Response:
-        if csrf_token:
+    def delete(
+            self,
+            url: str,
+            *,
+            csrf_frontend_url: Optional[str] = None,
+            csrf_no_cache: bool = False,
+            csrf_auto_retry: bool = True,
+    ) -> requests.Response:
+        if csrf_frontend_url:
+            csrf_token = self.get_csrf_token(csrf_frontend_url, no_cache=csrf_no_cache)
             r = self._session.delete(url, headers=_get_csrf_headers(csrf_token))
+            if not r.ok and not csrf_no_cache and csrf_auto_retry:
+                # retry request after expiring cached token
+                csrf_token = self.get_csrf_token(csrf_frontend_url, force_refresh=True)
+                r = self._session.delete(url, headers=_get_csrf_headers(csrf_token))
         else:
             r = self._session.delete(url)
 

@@ -71,33 +71,19 @@ class GroupsApiProvider:
         if not self._backend.logged_in:
             raise ValueError('User is not logged in')
 
-        # get AJAX security token from frontend
-        csrf_token = self._backend.get_csrf_token(urls.GROUPS_ROOT_URL)
-
         # format group creation post request
         data = {
             'group[name]': name,
             'group[group_type_id]': int(GroupType.SmallGroup)
         }
         # do group creation
-        r = self._backend.post(urls.GROUPS_BASE_URL, data=data, csrf_token=csrf_token)
+        r = self._backend.post(urls.GROUPS_BASE_URL, data=data, csrf_frontend_url=urls.GROUPS_ROOT_URL)
 
         # get the new group uri
         group_location = r.headers['Location']
 
         id_ = GroupIdentifier.from_url(group_location)
         return GroupObject(id_=id_, _api=self, _backend=self._backend)
-
-    def delete(self, group: GroupIdentifier):
-        """
-        Delete the given group
-        :param group: Identifier of group
-        :return: Response object resulting from deletion
-        """
-        csrf_token = self._backend.get_csrf_token(
-            urljoin(group.frontend_url + '/', 'settings')
-        )
-        self._backend.delete(group.frontend_url, csrf_token=csrf_token)
 
     def _get_raw(self, id_: GroupIdentifier) -> GroupSchema:
         txt = self._backend.get_json(id_.api_url)
@@ -213,11 +199,8 @@ class GroupObject:
         Delete the given group
         :return: If deletion was successful
         """
-        url = self.id_.frontend_url
-        csrf_token = self._backend.get_csrf_token(
-            urljoin(url + '/', 'settings')
-        )
-        self._backend.delete(url, csrf_token=csrf_token)
+        settings_url = urljoin(self.id_.frontend_url + '/', 'settings')
+        self._backend.delete(self.id_.frontend_url, csrf_frontend_url=settings_url)
 
         self.refresh()
         return self.deleted
