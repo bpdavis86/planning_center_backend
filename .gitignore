@@ -1,0 +1,10 @@
+*.pyc
+*.spec
+build/
+dist/
+out/
+venv/
+*report.txt
+**/*.egg-info
+**/.pytest_cache
+.idea/
