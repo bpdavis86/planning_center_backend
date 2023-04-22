@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from enum import IntEnum
 from urllib.parse import urljoin, urlparse
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Union, Optional, Sequence
 
 import msgspec
 import pandas as pd
 
-from ._json_schemas.groups import GroupSchema, GroupsSchema
+from ._json_schemas.groups import GroupSchema, GroupsSchema, GroupData, GroupAttributes
 from . import _urls as urls
 
 if TYPE_CHECKING:
@@ -97,11 +97,11 @@ class GroupsApiProvider:
         )
         self._backend.delete(group.frontend_url, csrf_token=csrf_token)
 
-    def get(self, group: GroupIdentifier) -> msgspec.Struct:
-        txt = self._backend.get_json(group.api_url)
+    def _get_raw(self, id_: GroupIdentifier) -> GroupSchema:
+        txt = self._backend.get_json(id_.api_url)
         return msgspec.json.decode(txt, type=GroupSchema)
 
-    def _get_all(self):
+    def _get_all_raw(self) -> Sequence[GroupData]:
         groups = []
         url = urls.GROUPS_API_BASE_URL
 
@@ -117,10 +117,65 @@ class GroupsApiProvider:
 
         return groups
 
-    def get_all_df(self) -> pd.DataFrame:
-        groups = self._get_all()
+    def get(self, id_: Union[int, GroupIdentifier]) -> GroupObject:
+        if isinstance(id_, int):
+            id_ = GroupIdentifier.from_id(id_)
+        raw = self._get_raw(id_)
+        return GroupObject(id_=id_, _api=self, _data=raw.data)
+
+    def get_all(self) -> GroupList:
+        groups_raw = self._get_all_raw()
+        return GroupList([
+            GroupObject(int(g.id), _api=self, _data=g)
+            for g in groups_raw
+        ])
+
+
+class GroupObject:
+    def __init__(
+            self,
+            id_: Union[int, GroupIdentifier],
+            _api: GroupsApiProvider,
+            _data: Optional[GroupData] = None,
+    ):
+        if isinstance(id_, int):
+            id_ = GroupIdentifier.from_id(id_)
+        self.id_ = id_
+        self._api = _api
+        self._data = None
+
+        if _data is not None:
+            self._data = _data
+        else:
+            self.refresh()
+
+    def refresh(self):
+        raw = self._api.get(self.id_)
+        self._data = raw._data
+
+    @property
+    def attributes(self) -> Optional[GroupAttributes]:
+        if self._data is not None:
+            return self._data.attributes
+        else:
+            return None
+
+    def __repr__(self):
+        attr = self.attributes
+        if attr is None:
+            return f'GroupObject(id_={self.id_.id_}, <no attributes>)'
+        return f'GroupObject(id_={self.id_.id_}, name="{self.attributes.name}")'
+
+
+class GroupList(list[GroupObject]):
+    def to_df(self):
+        """
+        Get group descriptions as a pandas dataframe
+        :return: Dataframe description of groups in list
+        """
+        groups = self
         group_attrs = [msgspec.structs.asdict(g.attributes) for g in groups]
         df = pd.DataFrame(group_attrs)
-        df.insert(0, 'id', pd.Series([int(g.id) for g in groups]))
+        df.insert(0, 'id', pd.Series([g.id_.id_ for g in groups]))
         df.set_index('id')
         return df
