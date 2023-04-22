@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from enum import IntEnum
 from urllib.parse import urljoin, urlparse
-from typing import TYPE_CHECKING, Union, Optional, Sequence
+from typing import TYPE_CHECKING, Union, Optional, Sequence, Type
 
 import msgspec
 import pandas as pd
 
 from ._exceptions import RequestError
-from ._json_schemas.groups import GroupSchema, GroupsSchema, GroupData, GroupAttributes
+from ._json_schemas.groups import GroupSchema, GroupsSchema, GroupData, GroupAttributes, MembershipsSchema, \
+    MembershipData, EventData, EventsSchema, TagData, TagsSchema
 from . import _urls as urls
 
 if TYPE_CHECKING:
@@ -204,6 +205,27 @@ class GroupObject:
 
         self.refresh()
         return self.deleted
+
+    def _get_link_with_schema(self, link_name: str, schema_type: Type[msgspec.Struct]):
+        if self._data is None:
+            self.refresh()
+        if self._data is None or link_name not in self._data.links:
+            return None
+        txt = self._backend.get_json(self._data.links[link_name])
+        raw = msgspec.json.decode(txt, type=schema_type)
+        return raw.data
+
+    @property
+    def memberships(self) -> Optional[list[MembershipData]]:
+        return self._get_link_with_schema('memberships', MembershipsSchema)
+
+    @property
+    def events(self) -> Optional[list[EventData]]:
+        return self._get_link_with_schema('events', EventsSchema)
+
+    @property
+    def tags(self) -> Optional[list[TagData]]:
+        return self._get_link_with_schema('tags', TagsSchema)
 
 
 class GroupList(list[GroupObject]):

@@ -23,12 +23,16 @@ class GroupsSchema(_ApiBase):
     data: list[GroupData]
 
 
-class GroupData(msgspec.Struct, forbid_unknown_fields=True):
+class _ObjectData(msgspec.Struct, forbid_unknown_fields=True):
     type: str
     id: str
-    attributes: GroupAttributes
+    attributes: dict
     relationships: dict
     links: dict
+
+
+class GroupData(_ObjectData):
+    attributes: GroupAttributes
 
 
 class GroupAttributes(msgspec.Struct, forbid_unknown_fields=True):
@@ -46,3 +50,63 @@ class GroupAttributes(msgspec.Struct, forbid_unknown_fields=True):
     header_image: dict
     archived_at: Optional[datetime] = None
     virtual_location_url: Optional[str] = None
+
+
+class MembershipsSchema(_ApiBase):
+    # schema for https://api.planningcenteronline.com/groups/v2/groups/<id>/memberships
+    data: list[MembershipData]
+
+
+class MembershipData(_ObjectData):
+    attributes: MembershipAttributes
+
+
+class MembershipAttributes(msgspec.Struct, forbid_unknown_fields=True):
+    account_center_identifier: int
+    first_name: str
+    last_name: str
+    role: str
+    email_address: str
+    phone_number: str
+    joined_at: datetime
+    color_identifier: int
+    avatar_url: str
+
+
+class EventsSchema(_ApiBase):
+    data: list[EventData]
+
+
+class EventData(_ObjectData):
+    attributes: EventAttributes
+
+
+class EventAttributes(msgspec.Struct, forbid_unknown_fields=True):
+    name: str
+    description: str
+    starts_at: datetime
+    ends_at: datetime
+    repeating: bool
+    multi_day: bool
+    attendance_requests_enabled: bool
+    automated_reminder_enabled: bool
+    reminders_sent: bool
+    reminders_sent_at: Optional[datetime]
+    canceled: bool
+    canceled_at: Optional[datetime]
+    location_type_preference: str
+    virtual_location_url: Optional[str]
+    visitors_count: Optional[int]
+
+
+class TagsSchema(_ApiBase):
+    data: list[TagData]
+
+
+class TagData(_ObjectData):
+    attributes: TagAttributes
+
+
+class TagAttributes(msgspec.Struct, forbid_unknown_fields=True):
+    name: str
+    position: int
