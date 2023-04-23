@@ -443,7 +443,13 @@ class GroupObject:
     def schedule(self, value: str):
         self._update_setting({'group[schedule]': value}, put=True, autosave=True)
 
-    def set_publicly_display_meeting_schedule(self, value: bool):
+    @property
+    def publicly_display_meeting_schedule(self) -> bool:
+        # FRAGILE - derived from UI due to lack of API access
+        return self._get_ui_checkbox_status('group[publicly_display_meeting_schedule]')
+
+    @publicly_display_meeting_schedule.setter
+    def publicly_display_meeting_schedule(self, value: bool):
         # this is not in the API for some reason
         self._update_setting(
             {'group[publicly_display_meeting_schedule]': int(value)},
