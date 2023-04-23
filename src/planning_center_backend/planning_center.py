@@ -136,6 +136,12 @@ class PlanningCenterBackend:
         else:
             raise RuntimeError(f'Logout failed, Request Status: {r.status_code}')
 
+    def get_frontend_soup(self, url: str) -> BeautifulSoup:
+        r = self._session.get(url, headers=dict(accept='text/html'))
+        if not r.ok:
+            raise RequestError(f'Could not get page content at {url}', response=r)
+        return BeautifulSoup(r.text, 'html.parser')
+
     def get_json(self, url: str):
         r = self._session.get(url, headers=dict(accept='application/json'))
         if not r.ok:

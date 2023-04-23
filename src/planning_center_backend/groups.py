@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from datetime import date
-from enum import IntEnum, Enum
+import json
+from datetime import date, datetime
+from enum import Enum
 from urllib.parse import urljoin, urlparse
 from typing import TYPE_CHECKING, Union, Optional, Sequence, Type, Any
 
 import msgspec
 import pandas as pd
+from bs4 import BeautifulSoup
 
 from ._exceptions import RequestError
 from ._json_schemas.groups import GroupSchema, GroupsSchema, GroupData, GroupAttributes, MembershipsSchema, \
@@ -14,10 +16,20 @@ from ._json_schemas.groups import GroupSchema, GroupsSchema, GroupData, GroupAtt
 from . import _urls as urls
 
 if TYPE_CHECKING:
+    # avoid circular import
     from .planning_center import PlanningCenterBackend
 
 
-__all__ = ['GroupType', 'GroupIdentifier', 'GroupsApiProvider']
+__all__ = [
+    'GroupType',
+    'GroupIdentifier',
+    'GroupsApiProvider',
+    'GroupEnrollment',
+    'GroupList',
+    'GroupObject',
+    'GroupEventsVisibility',
+    'GroupLocationType'
+]
 
 
 class GroupType(Enum):
@@ -170,6 +182,7 @@ class GroupObject:
         # data will be lazy load
 
         self._deleted = False
+        self._settings_soup = None
 
     def refresh(self) -> None:
         """
@@ -186,6 +199,19 @@ class GroupObject:
                     return
                 else:
                     raise e
+            self._refresh_settings()
+
+    def _refresh_settings(self):
+        # get settings page
+        self._settings_soup = self._backend.get_frontend_soup(self.settings_url)
+
+    def _get_settings_soup(self) -> BeautifulSoup:
+        # helper for lazy load of settings page
+        soup = self._settings_soup
+        if soup is None:
+            self._refresh_settings()
+            soup = self._settings_soup
+        return soup
 
     @property
     def deleted(self) -> bool:
@@ -260,6 +286,7 @@ class GroupObject:
     def tags(self) -> Optional[list[TagData]]:
         return self._get_link_with_schema('tags', TagsSchema)
 
+    # region Helpers for settings
     def _update_setting(
             self,
             data: dict[str, Any],
@@ -286,6 +313,55 @@ class GroupObject:
             csrf_frontend_url=self.settings_url
         )
         self.refresh()
+
+    def _get_ui_checkbox_status(self, name: str) -> bool:
+        soup = self._get_settings_soup()
+        check = soup.find(attrs={'name': name, 'class': 'checkbox'})
+        if not check:
+            raise RuntimeError(f'Could not find checkbox element {name}, check for UI changes')
+        # check box status
+        value = 'checked' in check.attrs
+        return value
+
+    def _get_ui_radio_value(self, name: str) -> str:
+        soup = self._get_settings_soup()
+        radios = soup.find_all(attrs={'name': name, 'class': 'radio'})
+        if not radios:
+            raise RuntimeError(f'Could not find radio elements with name {name}, check for UI changes')
+        for r in radios:
+            if 'checked' in r.attrs:
+                return r.attrs['value']
+        raise ValueError(f'Could not find a checked radio button with name {name}, check for UI changes')
+
+    def _get_ui_select_value(self, name: str) -> Optional[str]:
+        soup = self._get_settings_soup()
+        select = soup.find(attrs={'name': name, 'class': 'select'})
+        if not select:
+            raise RuntimeError(f'Could not find select elements with name {name}, check for UI changes')
+
+        selected = select.find(attrs={'selected': 'selected'})
+        if not selected:
+            # this is case where valueless option is selected
+            return None
+
+        return selected['value']
+
+    def _get_settings_data_react_props(self):
+        # Some of the settings have to be loaded directly from the settings frontend
+        # Some of these are embedded in react class property JSON strings
+        # Get the embedded React class parameters
+        # This is likely to break as the frontend evolves
+
+        soup = self._get_settings_soup()
+        react_elements = soup.find_all(attrs={'data-react-class': 'AppProvider'})
+        return [
+            json.loads(e.attrs['data-react-props'])
+            for e in react_elements
+        ]
+
+    # endregion
+
+    # region Basic Group Properties
 
     @property
     def name(self) -> Optional[str]:
@@ -384,9 +460,46 @@ class GroupObject:
             patch=True, autosave=True
         )
 
-    # TODO add tags
+    def _get_react_props_for_component(self, component_name: str):
+        react_data = self._get_settings_data_react_props()
+        for d in react_data:
+            if d['component'] == component_name:
+                return d
+        raise ValueError(
+            f'Could not find data for component {component_name} in React data '
+            'for frontend, check for UI changes'
+        )
 
-    def set_default_event_automated_reminders_schedule_offset(self, days: int):
+    @property
+    def default_event_automated_reminders_enabled(self) -> bool:
+        # FRAGILE - derived from UI due to lack of API access
+        data = self._get_react_props_for_component('Components.GroupSettingsEventReminderToggle')
+        return data['automatedRemindersEnabled']
+
+    @default_event_automated_reminders_enabled.setter
+    def default_event_automated_reminders_enabled(self, on: bool):
+        """
+        Set UI option "Send reminder emails"
+        :param on: True or False
+        :return: None
+        """
+        self._update_setting(
+            {'group[default_event_automated_reminders_enabled]': 'true' if on else 'false'},
+            patch=True, autosave=True
+        )
+
+    @property
+    def default_event_automated_reminders_schedule_offset(self) -> int:
+        """
+        UI option "Send reminder emails" number of days
+        :return: Number of days before event to send reminder
+        """
+        # FRAGILE - derived from UI due to lack of API access
+        data = self._get_react_props_for_component('Components.GroupSettingsEventReminderToggle')
+        return data['scheduleOffset'] // 86400
+
+    @default_event_automated_reminders_schedule_offset.setter
+    def default_event_automated_reminders_schedule_offset(self, days: int):
         """
         Set UI option "Send reminder emails" number of days
         :param days: Number of days before event to send reminder (1-10)
@@ -400,20 +513,6 @@ class GroupObject:
         self._update_setting(
             {
                 'group[default_event_automated_reminders_schedule_offset]': seconds
-            },
-            patch=True, autosave=True
-        )
-
-    def set_default_event_automated_reminders_enabled(self, on: bool):
-        """
-        Set UI option "Send reminder emails"
-        :param on: True or False
-        :return: None
-        """
-        # this is not in the API for some reason
-        self._update_setting(
-            {
-                'group[default_event_automated_reminders_enabled]': 'true' if on else 'false',
             },
             patch=True, autosave=True
         )
@@ -465,7 +564,13 @@ class GroupObject:
     def events_visibility(self, value: GroupEventsVisibility):
         self._update_setting({'group[events_visibility]': value.value}, put=True, autosave=True)
 
-    def set_leader_name_visible_on_public_page(self, on: bool) -> None:
+    @property
+    def leader_name_visible_on_public_page(self) -> bool:
+        # FRAGILE - derived from UI due to lack of API access
+        return self._get_ui_checkbox_status('group[leader_name_visible_on_public_page]')
+
+    @leader_name_visible_on_public_page.setter
+    def leader_name_visible_on_public_page(self, on: bool) -> None:
         """
         Set UI option "List leader's name publicly"
         :param on: True or False
@@ -477,7 +582,13 @@ class GroupObject:
             put=True, autosave=True
         )
 
-    def set_communication_enabled(self, on: bool):
+    @property
+    def communication_enabled(self) -> bool:
+        # FRAGILE - derived from UI due to lack of API access
+        return self._get_ui_checkbox_status('group[communication_enabled]')
+
+    @communication_enabled.setter
+    def communication_enabled(self, on: bool):
         """
         Set UI option "Enable Group Messaging"
         :param on: True or False
@@ -489,7 +600,18 @@ class GroupObject:
             put=True, autosave=True
         )
 
-    def set_members_can_create_forum_topics(self, on: bool):
+    @property
+    def members_can_create_forum_topics(self) -> bool:
+        """
+        UI option "Who can create new messages?"
+        :return: True or False (True corresponds to "Members and leaders" in UI)
+        """
+        # FRAGILE - derived from UI due to lack of API access
+        value = self._get_ui_radio_value('group[members_can_create_forum_topics]')
+        return value == 'true'
+
+    @members_can_create_forum_topics.setter
+    def members_can_create_forum_topics(self, on: bool):
         """
         Set UI option "Who can create new messages?"
         :param on: True or False (True corresponds to "Members and leaders" in UI)
@@ -501,19 +623,38 @@ class GroupObject:
             put=True, autosave=True
         )
 
-    def set_enrollment_open_until(self, value: Optional[date]):
+    @property
+    def enrollment_open_until(self) -> Optional[date]:
+        # FRAGILE - derived from UI due to lack of API access
+        data = self._get_react_props_for_component(
+            'Components.GroupSettings.MembershipSettingsForm'
+        )
+        value = data['settings']['enrollmentOpenUntil']
+        return datetime.fromisoformat(value).date() if value is not None else None
+
+    @enrollment_open_until.setter
+    def enrollment_open_until(self, value: Optional[date]):
         """
         Set UI option "Auto-close enrollment on"
         :param value: Date at which enrollment closes, None for off
         :return: None
         """
-        # this is not in the API for some reason
         self._update_setting(
             {'group[enrollment_open_until]': value.isoformat() if value else ''},
             put=True, autosave=True
         )
 
-    def set_enrollment_limit(self, value: Optional[int]):
+    @property
+    def enrollment_limit(self) -> Optional[int]:
+        # FRAGILE - derived from UI due to lack of API access
+        data = self._get_react_props_for_component(
+            'Components.GroupSettings.MembershipSettingsForm'
+        )
+        value = data['settings']['enrollmentLimit']
+        return value
+
+    @enrollment_limit.setter
+    def enrollment_limit(self, value: Optional[int]):
         """
         Set UI option "Auto-close if enrollment number reaches"
         :param value: Number at which enrollment closes, None for off
@@ -525,17 +666,65 @@ class GroupObject:
             put=True, autosave=True
         )
 
-    def set_member_limit_maximum_alert(self, value: Optional[int]):
+    @property
+    def member_limit_maximum_alert(self) -> Optional[int]:
+        # FRAGILE - derived from UI due to lack of API access
+        data = self._get_react_props_for_component(
+            'Components.GroupSettings.MembershipSettingsForm'
+        )
+        value = data['settings']['memberLimitMaximumAlert']
+        return value
+
+    @member_limit_maximum_alert.setter
+    def member_limit_maximum_alert(self, value: Optional[int]):
         """
         Set UI option "Create alert if group membership exceeds"
         :param value: Number at which enrollment closes, None for off
         :return: None
         """
-        # this is not in the API for some reason
         self._update_setting(
             {'group[member_limit_maximum_alert]': value if value is not None else ''},
             put=True, autosave=True
         )
+
+    @property
+    def request_event_attendance_from_leaders(self) -> bool:
+        # FRAGILE - derived from UI due to lack of API access
+        return self._get_ui_checkbox_status('group[request_event_attendance_from_leaders]')
+
+    @request_event_attendance_from_leaders.setter
+    def request_event_attendance_from_leaders(self, value: bool) -> None:
+        self._update_setting(
+            {'group[request_event_attendance_from_leaders]': int(value)},
+            put=True, autosave=True
+        )
+
+    @property
+    def attendance_reply_to_person_id(self) -> Optional[int]:
+        # FRAGILE - derived from UI due to lack of API access
+        s = self._get_ui_select_value('group[attendance_reply_to_person_id]')
+        return int(s) if s is not None else None
+
+    @attendance_reply_to_person_id.setter
+    def attendance_reply_to_person_id(self, value: Optional[int]) -> None:
+        self._update_setting(
+            {'group[attendance_reply_to_person_id]': value if value is not None else ''},
+            put=True, autosave=True
+        )
+
+    @property
+    def leaders_can_search_people_database(self) -> bool:
+        # FRAGILE - derived from UI due to lack of API access
+        return self._get_ui_checkbox_status('group[leaders_can_search_people_database]')
+
+    @leaders_can_search_people_database.setter
+    def leaders_can_search_people_database(self, value: bool) -> None:
+        self._update_setting(
+            {'group[leaders_can_search_people_database]': int(value)},
+            put=True, autosave=True
+        )
+
+    # endregion
 
 
 class GroupList(list[GroupObject]):
@@ -555,4 +744,3 @@ class GroupList(list[GroupObject]):
 class MembersApiProvider:
     def __init__(self, _backend: PlanningCenterBackend):
         self._backend = _backend
-
