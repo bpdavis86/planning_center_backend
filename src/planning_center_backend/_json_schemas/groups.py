@@ -19,8 +19,8 @@ class _DataBase(msgspec.Struct, forbid_unknown_fields=True):
     type: str
     id: str
     attributes: dict
-    relationships: dict
-    links: dict
+    links: Optional[dict] = None
+    relationships: Optional[dict] = None
 
 
 # endregion
@@ -127,5 +127,40 @@ class TagData(_DataBase):
 class TagAttributes(msgspec.Struct, forbid_unknown_fields=True):
     name: str
     position: int
+
+# endregion
+
+# region People
+
+
+class PeopleSchema(_ApiBase):
+    # schema for https://api.planningcenteronline.com/groups/v2/groups/<id>/memberships
+    data: list[PersonData]
+
+
+class PersonData(_DataBase):
+    attributes: PersonAttributes
+
+
+class PersonAttributes(msgspec.Struct, forbid_unknown_fields=True):
+    addresses: list
+    avatar_url: str
+    created_at: datetime
+    email_addresses: list
+    first_name: str
+    last_name: str
+    permissions: str
+    phone_numbers: list
+
+# endregion
+
+
+# region People v1
+
+class PersonV1Data(msgspec.Struct):
+    errors: list
+    id: int
+    account_center_id: int
+    # the rest of the fields we don't care about for now
 
 # endregion

@@ -12,7 +12,7 @@ from bs4 import BeautifulSoup
 
 from ._exceptions import RequestError
 from ._json_schemas.groups import GroupSchema, GroupsSchema, GroupData, GroupAttributes, MembershipsSchema, \
-    MembershipData, EventData, EventsSchema, TagData, TagsSchema
+    MembershipData, EventData, EventsSchema, TagData, TagsSchema, PeopleSchema, PersonV1Data
 from . import _urls as urls
 
 if TYPE_CHECKING:
@@ -93,6 +93,7 @@ class GroupIdentifier:
 class GroupsApiProvider:
     def __init__(self, _backend: PlanningCenterBackend):
         self._backend = _backend
+        self.people = PeopleApiProvider(self._backend)
 
     def create(self, name: str, *, group_type: GroupType = GroupType.SmallGroup) -> GroupObject:
         """
@@ -285,6 +286,33 @@ class GroupObject:
     @property
     def tags(self) -> Optional[list[TagData]]:
         return self._get_link_with_schema('tags', TagsSchema)
+
+    def _get_member_add_id(self, id_: int):
+        # For some reason the member adding API uses a different ID from the standard person ID
+        # We can read/create this ID by querying
+        # https://groups.planningcenteronline.com/api/v1/people/<account_id>.json
+        url = urljoin(urls.GROUPS_PEOPLE_V1_BASE + '/', f'{id_}.json')
+        txt = self._backend.get_json(url)
+        data = msgspec.json.decode(txt, type=PersonV1Data)
+        if data.errors:
+            raise RuntimeError(f'There were errors in the API result: {data.errors}')
+        if data.account_center_id != id_:
+            raise RuntimeError('Unexpected API error, ids do not match')
+        return data.id
+
+    def add_member(self, person_id: int, leader: bool = False, notify: bool = False):
+        # A different ID is used when adding member using this API
+        add_person_id = self._get_member_add_id(person_id)
+
+        members_url = urljoin(self.frontend_url + '/', 'members')
+        data = {
+            'membership[person_id]': add_person_id,
+            'membership[role]': 'leader' if leader else 'member',
+        }
+        if notify:
+            data['notify_member'] = 1
+        self._backend.post(members_url, data=data, csrf_frontend_url=members_url)
+
 
     # region Helpers for settings
     def _update_setting(
@@ -741,6 +769,27 @@ class GroupList(list[GroupObject]):
         return df
 
 
-class MembersApiProvider:
+class PeopleApiProvider:
     def __init__(self, _backend: PlanningCenterBackend):
         self._backend = _backend
+
+    # def get(self, id_: Optional[int] = None) -> PersonData:
+    #     url = urljoin(urls.GROUPS_PEOPLE_URL + '/', str(id_))
+
+    def query_people(
+            self,
+            first_name: Optional[str] = None,
+            last_name: Optional[str] = None,
+    ):
+        # Note: this query will only return people who have ever interacted with the group system
+        # i.e. have ever been added to a group and have a group add id associated with them.
+        # We probably want to use the separate people system API to query people ids
+        params = {}
+        url = urls.GROUPS_PEOPLE_URL
+        if first_name is not None:
+            params['where[first_name]'] = first_name
+        elif last_name is not None:
+            params['where[last_name]'] = last_name
+        txt = self._backend.get_json(url, params=params)
+        return msgspec.json.decode(txt, type=PeopleSchema)
+

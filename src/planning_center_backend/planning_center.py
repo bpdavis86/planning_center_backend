@@ -142,8 +142,8 @@ class PlanningCenterBackend:
             raise RequestError(f'Could not get page content at {url}', response=r)
         return BeautifulSoup(r.text, 'html.parser')
 
-    def get_json(self, url: str):
-        r = self._session.get(url, headers=dict(accept='application/json'))
+    def get_json(self, url: str, params: Optional[dict] = None):
+        r = self._session.get(url, headers=dict(accept='application/json'), params=params)
         if not r.ok:
             raise RequestError(f'Could not get JSON content at {url}', response=r)
         return r.text
