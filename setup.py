@@ -26,5 +26,5 @@ setup(
         'pandas',
         'cachetools',
     ],
-    extras_require={"test": ['pytest']},
+    extras_require={"test": ['pytest', 'keyring']},
 )
