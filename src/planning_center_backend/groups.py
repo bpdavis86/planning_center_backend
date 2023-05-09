@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import date, datetime
 from enum import Enum
 from urllib.parse import urljoin, urlparse
@@ -161,6 +162,20 @@ class GroupsApiProvider:
             GroupObject(int(g.id), _api=self, _backend=self._backend, _data=g)
             for g in groups_raw
         ])
+
+
+_js_re_str = r"""(?xs)
+<!\[CDATA\[ \s* 
+(.*?)
+(?://)? ]]>
+"""
+
+_json_re_str = r"""(?xs)
+Components\.Groups\.Tags, \s*
+(\{.*?})\) 
+, \s* document\.getElementById
+"""
+_json_re = re.compile(_json_re_str)
 
 
 class GroupObject:
@@ -386,6 +401,32 @@ class GroupObject:
             json.loads(e.attrs['data-react-props'])
             for e in react_elements
         ]
+
+    def _get_tag_json_data(self) -> dict:
+        # This is pretty awful
+        # The tag resource URLs are embedded in JS code in a script
+        # Do some regex magic to get it out
+        soup = self._get_settings_soup()
+
+        # find the div containing tags script
+        div = soup.find(attrs={'id': re.compile(r'tags_group_.*')})
+        if not div:
+            raise RuntimeError('Could not find tags script div, check for UI changes')
+        txt = div.find('script').string
+
+        # extract JS code
+        m = re.search(r'(?xs) <!\[CDATA\[ \s* (.*?) (?://)? ]]>', txt)
+        if not m:
+            raise RuntimeError('Could not parse tags script, check for UI changes')
+        js = m.group(1)
+
+        # extract JSON from JS code
+        # m = re.search(r'(?xs) Components\.Groups\.Tags, \s* (\{.*?})\) , \s* document\.getElementById', js)
+        m = re.search(_json_re, js)
+        if not m:
+            raise RuntimeError('Could not parse tags script, check for UI changes')
+        json_txt = m.group(1)
+        return json.loads(json_txt)
 
     # endregion
 
