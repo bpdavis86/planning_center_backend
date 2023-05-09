@@ -171,7 +171,7 @@ _js_re_str = r"""(?xs)
 """
 
 _json_re_str = r"""(?xs)
-Components\.Groups\.Tags, \s*
+Components\.[^,\s]+, \s*
 (\{.*?})\) 
 , \s* document\.getElementById
 """
@@ -328,7 +328,6 @@ class GroupObject:
             data['notify_member'] = 1
         self._backend.post(members_url, data=data, csrf_frontend_url=members_url)
 
-
     # region Helpers for settings
     def _update_setting(
             self,
@@ -402,31 +401,42 @@ class GroupObject:
             for e in react_elements
         ]
 
-    def _get_tag_json_data(self) -> dict:
-        # This is pretty awful
-        # The tag resource URLs are embedded in JS code in a script
+    def _get_div_script_json_data(self, div_id) -> dict:
+        # Get UI info that is embedded in JS script which calls React createElement
+        # Expected structure is
+        # <div id=...><script>
+        # //<![CDATA[
+        # $(function() {
+        # ...
+        # Components.GroupSettings.EnrollmentSettings, (json data), document.getElementById...
+        # //]]>
+        # </script></div>
+
         # Do some regex magic to get it out
         soup = self._get_settings_soup()
 
         # find the div containing tags script
-        div = soup.find(attrs={'id': re.compile(r'tags_group_.*')})
+        div = soup.find(attrs={'id': div_id})
         if not div:
-            raise RuntimeError('Could not find tags script div, check for UI changes')
+            raise RuntimeError(f'Could not script div {div_id}, check for UI changes')
         txt = div.find('script').string
 
         # extract JS code
         m = re.search(r'(?xs) <!\[CDATA\[ \s* (.*?) (?://)? ]]>', txt)
         if not m:
-            raise RuntimeError('Could not parse tags script, check for UI changes')
+            raise RuntimeError('Could not parse JS script, check for UI changes')
         js = m.group(1)
 
         # extract JSON from JS code
         # m = re.search(r'(?xs) Components\.Groups\.Tags, \s* (\{.*?})\) , \s* document\.getElementById', js)
         m = re.search(_json_re, js)
         if not m:
-            raise RuntimeError('Could not parse tags script, check for UI changes')
+            raise RuntimeError('Could not parse JSON from JS script, check for UI changes')
         json_txt = m.group(1)
         return json.loads(json_txt)
+
+    def _get_tag_json_data(self) -> dict:
+        return self._get_div_script_json_data(re.compile(r'tags_group_.*'))
 
     # endregion
 
@@ -701,10 +711,13 @@ class GroupObject:
     @property
     def enrollment_open_until(self) -> Optional[date]:
         # FRAGILE - derived from UI due to lack of API access
-        data = self._get_react_props_for_component(
-            'Components.GroupSettings.MembershipSettingsForm'
-        )
-        value = data['settings']['enrollmentOpenUntil']
+        # data = self._get_react_props_for_component(
+        #     'Components.GroupSettings.MembershipSettingsForm'
+        # )
+        # value = data['settings']['enrollmentOpenUntil']
+        data = self._get_div_script_json_data(re.compile(r'enrollment_settings_group_.*'))
+        value = data['enrollmentOpenUntil']
+
         return datetime.fromisoformat(value).date() if value is not None else None
 
     @enrollment_open_until.setter
@@ -722,10 +735,12 @@ class GroupObject:
     @property
     def enrollment_limit(self) -> Optional[int]:
         # FRAGILE - derived from UI due to lack of API access
-        data = self._get_react_props_for_component(
-            'Components.GroupSettings.MembershipSettingsForm'
-        )
-        value = data['settings']['enrollmentLimit']
+        # data = self._get_react_props_for_component(
+        #     'Components.GroupSettings.MembershipSettingsForm'
+        # )
+        # value = data['settings']['enrollmentLimit']
+        data = self._get_div_script_json_data(re.compile(r'enrollment_settings_group_.*'))
+        value = data['enrollmentLimit']
         return value
 
     @enrollment_limit.setter
@@ -744,10 +759,12 @@ class GroupObject:
     @property
     def member_limit_maximum_alert(self) -> Optional[int]:
         # FRAGILE - derived from UI due to lack of API access
-        data = self._get_react_props_for_component(
-            'Components.GroupSettings.MembershipSettingsForm'
-        )
-        value = data['settings']['memberLimitMaximumAlert']
+        # data = self._get_react_props_for_component(
+        #     'Components.GroupSettings.MembershipSettingsForm'
+        # )
+        # value = data['settings']['memberLimitMaximumAlert']
+        data = self._get_div_script_json_data(re.compile(r'enrollment_settings_group_.*'))
+        value = data['memberLimitMaximumAlert']
         return value
 
     @member_limit_maximum_alert.setter
