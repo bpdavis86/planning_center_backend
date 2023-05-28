@@ -14,6 +14,8 @@ from .groups import GroupsApiProvider
 
 __all__ = ['PlanningCenterBackend']
 
+from .people import PeopleApiProvider
+
 
 def _get_csrf_headers(csrf_token: str) -> dict[str, str]:
     # format headers for a spoofed AJAX request
@@ -50,6 +52,7 @@ class PlanningCenterBackend:
         self._username: Optional[str] = None
         self._session: Session = Session()
         self.groups = GroupsApiProvider(self)
+        self.people = PeopleApiProvider(self)
 
     def __repr__(self):
         return f'PlanningCenterBackend(logged_in={self._logged_in}, username={self._username})'
