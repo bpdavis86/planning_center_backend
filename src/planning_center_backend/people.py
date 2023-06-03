@@ -67,6 +67,6 @@ class PeopleApiProvider(ApiProvider):
 
         return self.query_api(url=urls.PEOPLE_API_BASE_URL, params=query_params, schema=PeopleSchema)
 
-    def get(self, id_: int) -> PersonData:
+    def get(self, id_: Union[str, int]) -> PersonData:
         url = urljoin(urls.PEOPLE_API_BASE_URL + '/', f'{id_}')
         return self.query_api(url=url, schema=PersonSchema)

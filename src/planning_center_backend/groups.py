@@ -141,12 +141,14 @@ class GroupsApiProvider(ApiProvider):
         id_ = GroupIdentifier.from_url(group_location)
         return GroupObject(id_=id_, _api=self, _backend=self._backend)
 
-    def get(self, id_: Union[int, GroupIdentifier]) -> GroupObject:
+    def get(self, id_: Union[int, GroupIdentifier, str]) -> GroupObject:
         """
         Get a specific group access object by id.
         :param id_: Group id number or identifier object
         :return: Group accessor object
         """
+        if isinstance(id_, str):
+            id_ = int(id_)
         if isinstance(id_, int):
             id_ = GroupIdentifier.from_id(id_)
         data = self.query_api(url=id_.api_url, schema=GroupSchema)
