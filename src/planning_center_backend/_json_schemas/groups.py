@@ -55,12 +55,12 @@ class MembershipData(_DataBase):
 
 
 class MembershipAttributes(msgspec.Struct, forbid_unknown_fields=True):
-    account_center_identifier: int
     first_name: str
     last_name: str
     role: str
-    email_address: str
     phone_number: str
+    email_address: str
+    account_center_identifier: int
     joined_at: datetime
     color_identifier: int
     avatar_url: str
