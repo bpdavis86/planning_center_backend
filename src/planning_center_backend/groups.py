@@ -13,6 +13,7 @@ import pandas as pd
 from bs4 import BeautifulSoup
 
 from ._exceptions import RequestError
+from ._json_schemas.base import ApiBase
 from ._json_schemas.groups import GroupSchema, GroupsSchema, GroupData, GroupAttributes, MembershipsSchema, \
     MembershipData, EventData, EventsSchema, TagData, TagsSchema, PeopleSchema, PersonV1Data
 from . import _urls as urls
@@ -298,14 +299,12 @@ class GroupObject:
         self._auto_refresh()
         return self.deleted
 
-    def _get_link_with_schema(self, link_name: str, schema_type: Type[msgspec.Struct]):
+    def _get_link_with_schema(self, link_name: str, schema_type: Type[ApiBase]):
         if self._data is None:
             self.refresh()
         if self._data is None or link_name not in self._data.links:
             return None
-        txt = self._backend.get_json(self._data.links[link_name])
-        raw = msgspec.json.decode(txt, type=schema_type)
-        return raw.data
+        return self._api.query_api(self._data.links[link_name], schema=schema_type)
 
     @property
     def memberships(self) -> Optional[list[MembershipData]]:
@@ -850,13 +849,7 @@ class GroupList(list[GroupObject]):
         return df
 
 
-class PeopleApiProvider:
-    def __init__(self, _backend: PlanningCenterBackend):
-        self._backend = _backend
-
-    # def get(self, id_: Optional[int] = None) -> PersonData:
-    #     url = urljoin(urls.GROUPS_PEOPLE_URL + '/', str(id_))
-
+class PeopleApiProvider(ApiProvider):
     def query_people(
             self,
             first_name: Optional[str] = None,
@@ -866,11 +859,8 @@ class PeopleApiProvider:
         # i.e. have ever been added to a group and have a group add id associated with them.
         # We probably want to use the separate people system API to query people ids
         params = {}
-        url = urls.GROUPS_PEOPLE_URL
         if first_name is not None:
             params['where[first_name]'] = first_name
-        elif last_name is not None:
+        if last_name is not None:
             params['where[last_name]'] = last_name
-        txt = self._backend.get_json(url, params=params)
-        return msgspec.json.decode(txt, type=PeopleSchema)
-
+        return self.query_api(urls.GROUPS_PEOPLE_URL, params=params, schema=PeopleSchema)

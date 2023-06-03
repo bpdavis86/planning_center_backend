@@ -4,8 +4,6 @@ from datetime import date, datetime
 from typing import Optional, NamedTuple, Sequence
 from urllib.parse import urljoin
 
-import msgspec
-
 from . import _urls as urls
 from ._json_schemas.people import PeopleSchema, PersonSchema, PersonData
 from .api_provider import ApiProvider
@@ -69,5 +67,4 @@ class PeopleApiProvider(ApiProvider):
 
     def get(self, id_: int) -> PersonData:
         url = urljoin(urls.PEOPLE_API_BASE_URL + '/', f'{id_}')
-        txt = self._backend.get_json(url)
-        return msgspec.json.decode(txt, type=PersonSchema).data
+        return self.query_api(url=url, schema=PersonSchema)
