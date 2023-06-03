@@ -850,7 +850,7 @@ class GroupList(list[GroupObject]):
 
 
 class PeopleApiProvider(ApiProvider):
-    def query_people(
+    def query(
             self,
             first_name: Optional[str] = None,
             last_name: Optional[str] = None,
