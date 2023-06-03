@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, Any
 
 import msgspec
 
@@ -8,7 +8,7 @@ import msgspec
 
 
 class ApiBase(msgspec.Struct):
-    data: dict
+    data: Any
     included: list
     meta: dict
     links: Optional[dict] = None
