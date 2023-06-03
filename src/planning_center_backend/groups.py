@@ -323,6 +323,71 @@ class GroupObject:
     def tags(self) -> Optional[list[TagData]]:
         return self._get_link_with_schema('tags', TagsSchema)
 
+    def _tag_input_to_id(self, input_: Union[str, int, TagData]) -> int:
+        if isinstance(input_, TagData):
+            input_ = int(input_.id)
+
+        if isinstance(input_, str):
+            found_tags = self._api.tags.query(input_)
+            if len(found_tags) == 0:
+                raise ValueError(f'Tag with name matching {input_} does not exist')
+            if len(found_tags) > 1:
+                raise ValueError(f'Multiple tags match name {input_}, please refine search')
+            id_ = int(found_tags[0].id)
+        elif isinstance(input_, int):
+            try:
+                self._api.tags.get(input_)
+            except RequestError:
+                raise ValueError(f'Tag with id {input_} could not be found')
+            id_ = input_
+        else:
+            raise ValueError('input must be str (name to search), int (tag id), or TagData object')
+        return id_
+
+    def has_tag(self, input_: Union[str, int, TagData]) -> bool:
+        id_ = self._tag_input_to_id(input_)
+        current_tags = self.tags
+        return len([t for t in current_tags if int(t.id) == id_]) > 0
+
+    def add_tag(self, input_: Union[str, int, TagData], exists_ok: bool = True):
+        id_ = self._tag_input_to_id(input_)
+        # for some reason the backend will let you add a tag twice
+        # this is bad, and we need to try to prevent
+
+        # check this id is in our tags
+        if self.has_tag(id_):
+            if not exists_ok:
+                raise ValueError('Tag already exists')
+            else:
+                return
+
+        tags_url = urljoin(self.frontend_url + '/', 'tags')
+        data = {'group_tag[tag_id]': id_}
+        self._backend.post(tags_url, data=data, csrf_frontend_url=self.settings_url)
+        self._auto_refresh()
+
+    def delete_tag(self, input_: Union[str, int, TagData], missing_ok: bool = True):
+        id_ = self._tag_input_to_id(input_)
+
+        # check this id is in our tags
+        if not self.has_tag(id_):
+            if not missing_ok:
+                raise ValueError('Tag does not exist in group')
+            else:
+                return
+
+        # we must find the deletion URL by some frontend hackery
+        tag_data = self._get_div_script_json_data(re.compile(r'tags_group_.*'))
+        tags = tag_data['tags']
+        this_tag = [t for t in tags if t['id'] == id_]
+        if len(this_tag) == 0 or len(this_tag) > 1:
+            raise RuntimeError('Error in retrieving tag metadata from frontend, check for interface changes')
+        this_tag = this_tag[0]
+
+        # finally we get the deletion url
+        url = this_tag['url']
+        self._backend.delete(url, csrf_frontend_url=self.settings_url)
+
     def _get_member_add_id(self, id_: int):
         # For some reason the member adding API uses a different ID from the standard person ID
         # We can read/create this ID by querying
@@ -455,9 +520,6 @@ class GroupObject:
             raise RuntimeError('Could not parse JSON from JS script, check for UI changes')
         json_txt = m.group(1)
         return json.loads(json_txt)
-
-    def _get_tag_json_data(self) -> dict:
-        return self._get_div_script_json_data(re.compile(r'tags_group_.*'))
 
     # endregion
 

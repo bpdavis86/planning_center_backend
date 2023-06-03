@@ -46,6 +46,23 @@ class TestGroup:
     def test_tags(self, test_group):
         _ = test_group.tags
 
+    def test_duplicate_add(self, test_group):
+        with pytest.raises(ValueError):
+            test_group.add_tag('Wed')
+            test_group.add_tag('Wed', exists_ok=False)
+
+    def test_duplicate_delete(self, test_group):
+        with pytest.raises(ValueError):
+            test_group.delete_tag('Wed')
+            test_group.delete_tag('Wed', missing_ok=False)
+
+    def test_modify_tags(self, test_group):
+        test_group.add_tag('Wed')
+        test_group.delete_tag('Wed', missing_ok=False)
+        assert not test_group.has_tag('Wed')
+        test_group.add_tag('Wed', exists_ok=False)
+        assert test_group.has_tag('Wed')
+
     def test_name(self, test_group, run_id):
         _property_tester(test_group, 'name', f'Test Name {run_id}')
 
