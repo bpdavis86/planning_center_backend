@@ -4,10 +4,10 @@ from .._json_schemas.groups import PeopleSchema
 from ..api_provider import ApiProvider
 from .. import _urls as urls
 
-__all__ = ['PeopleApiProvider']
+__all__ = ['GroupsPeopleApiProvider']
 
 
-class PeopleApiProvider(ApiProvider):
+class GroupsPeopleApiProvider(ApiProvider):
     def query(
             self,
             first_name: Optional[str] = None,

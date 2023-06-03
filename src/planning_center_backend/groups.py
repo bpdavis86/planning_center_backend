@@ -13,10 +13,11 @@ import pandas as pd
 from bs4 import BeautifulSoup
 
 from ._exceptions import RequestError
-from ._groups.people import PeopleApiProvider
+from ._groups.people import GroupsPeopleApiProvider
+from ._groups.tags import TagsApiProvider
 from ._json_schemas.base import ApiBase
 from ._json_schemas.groups import GroupSchema, GroupsSchema, GroupData, GroupAttributes, MembershipsSchema, \
-    MembershipData, EventData, EventsSchema, TagData, TagsSchema, PeopleSchema, PersonV1Data
+    MembershipData, EventData, EventsSchema, TagData, TagsSchema, PersonV1Data
 from . import _urls as urls
 from .api_provider import ApiProvider
 
@@ -98,7 +99,7 @@ class GroupIdentifier:
 class GroupsApiProvider(ApiProvider):
     def __init__(self, _backend: PlanningCenterBackend):
         super().__init__(_backend=_backend)
-        self.people = PeopleApiProvider(self._backend)
+        self.people = GroupsPeopleApiProvider(self._backend)
 
     def _check_exists(self, name: str) -> bool:
         groups = self.query(name)
