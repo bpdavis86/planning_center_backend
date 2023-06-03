@@ -2,7 +2,8 @@ from datetime import date, timedelta
 
 import pytest
 from planning_center_backend import planning_center
-from planning_center_backend.groups import GroupType, GroupEnrollment, GroupLocationType, GroupEventsVisibility
+from planning_center_backend.groups import GroupType, GroupEnrollment, GroupLocationType, GroupEventsVisibility, \
+    GroupObject
 
 
 def test_get(backend_session: planning_center.PlanningCenterBackend, test_group_id: int):
@@ -11,8 +12,15 @@ def test_get(backend_session: planning_center.PlanningCenterBackend, test_group_
 
 
 def test_get_all(backend_session: planning_center.PlanningCenterBackend, test_group_id: int):
-    groups = backend_session.groups.get_all()
+    groups = backend_session.groups.query()
     assert groups
+
+
+def test_query(backend_session: planning_center.PlanningCenterBackend, test_group: GroupObject):
+    name = test_group.name
+    result = backend_session.groups.query(name=name)
+    assert len(result) == 1
+    assert result[0].name == name
 
 
 def _property_tester(obj, attr, value):

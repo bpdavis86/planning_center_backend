@@ -125,16 +125,15 @@ class GroupsApiProvider:
         txt = self._backend.get_json(id_.api_url)
         return msgspec.json.decode(txt, type=GroupSchema)
 
-    def _get_all_raw(self) -> Sequence[GroupData]:
+    def _get_all_raw(self, url=urls.GROUPS_API_BASE_URL, params=None) -> Sequence[GroupData]:
         # The groups URL api returns JSON in chunks
         # For every request, if links contains 'next', that is the URL
         # of next groups chunk.
         groups = []
-        url = urls.GROUPS_API_BASE_URL
 
         # Loop all the group chunks while we are pointed to a next URL
         while url:
-            txt = self._backend.get_json(url)
+            txt = self._backend.get_json(url, params)
             section = msgspec.json.decode(txt, type=GroupsSchema)
             groups.extend(section.data)
 
@@ -156,8 +155,11 @@ class GroupsApiProvider:
         raw = self._get_raw(id_)
         return GroupObject(id_=id_, _api=self, _backend=self._backend, _data=raw.data)
 
-    def get_all(self) -> GroupList:
-        groups_raw = self._get_all_raw()
+    def query(self, name: Optional[str] = None) -> GroupList:
+        params = {}
+        if name is not None:
+            params['where[name]'] = name
+        groups_raw = self._get_all_raw(params=params)
         return GroupList([
             GroupObject(int(g.id), _api=self, _backend=self._backend, _data=g)
             for g in groups_raw
