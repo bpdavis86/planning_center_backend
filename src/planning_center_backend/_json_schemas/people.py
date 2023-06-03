@@ -5,15 +5,15 @@ from typing import Optional
 
 import msgspec
 
-from .base import _ApiBase, _DataBase
+from .base import ApiBase, _DataBase
 
 
-class PersonSchema(_ApiBase):
+class PersonSchema(ApiBase):
     # schema for https://api.planningcenteronline.com/people/v2/people/<id>
     data: PersonData
 
 
-class PeopleSchema(_ApiBase):
+class PeopleSchema(ApiBase):
     # schema for https://api.planningcenteronline.com/people/v2/people
     data: list[PersonData]
 

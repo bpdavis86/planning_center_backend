@@ -7,7 +7,7 @@ import msgspec
 # region Base Objects
 
 
-class _ApiBase(msgspec.Struct):
+class ApiBase(msgspec.Struct):
     data: dict
     included: list
     meta: dict

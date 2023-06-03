@@ -1,17 +1,14 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import TYPE_CHECKING, Optional, NamedTuple
+from typing import Optional, NamedTuple, Sequence
 from urllib.parse import urljoin
 
 import msgspec
 
 from . import _urls as urls
-from ._json_schemas.people import PeopleSchema, PersonSchema
-
-if TYPE_CHECKING:
-    # avoid circular import
-    from .planning_center import PlanningCenterBackend
+from ._json_schemas.people import PeopleSchema, PersonSchema, PersonData
+from .api_provider import ApiProvider
 
 
 class PeopleQueryExpression(NamedTuple):
@@ -44,11 +41,13 @@ class PeopleQueryExpression(NamedTuple):
     updated_at: Optional[datetime] = None
 
 
-class PeopleApiProvider:
-    def __init__(self, _backend: PlanningCenterBackend):
-        self._backend = _backend
-
-    def query(self, expr: PeopleQueryExpression, per_page: Optional[int] = None, offset: Optional[int] = None):
+class PeopleApiProvider(ApiProvider):
+    def query(
+            self,
+            expr: PeopleQueryExpression,
+            per_page: Optional[int] = None,
+            offset: Optional[int] = None
+    ) -> Sequence[PersonData]:
         _expr_d = expr._asdict()
         _expr_d_c = _expr_d.copy()
         for k, v in _expr_d_c.items():
@@ -66,10 +65,9 @@ class PeopleApiProvider:
         if offset is not None:
             query_params['offset'] = str(offset)
 
-        txt = self._backend.get_json(urls.PEOPLE_API_BASE_URL, query_params)
-        return msgspec.json.decode(txt, type=PeopleSchema)
+        return self.query_api(url=urls.PEOPLE_API_BASE_URL, params=query_params, schema=PeopleSchema)
 
-    def get(self, id_: int):
+    def get(self, id_: int) -> PersonData:
         url = urljoin(urls.PEOPLE_API_BASE_URL + '/', f'{id_}')
         txt = self._backend.get_json(url)
-        return msgspec.json.decode(txt, type=PersonSchema)
+        return msgspec.json.decode(txt, type=PersonSchema).data

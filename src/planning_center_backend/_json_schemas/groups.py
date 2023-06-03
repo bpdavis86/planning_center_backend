@@ -5,17 +5,17 @@ from typing import Optional
 
 import msgspec
 
-from .base import _ApiBase, _DataBase
+from .base import ApiBase, _DataBase
 
 
 # region Groups
 
-class GroupSchema(_ApiBase):
+class GroupSchema(ApiBase):
     # schema for https://api.planningcenteronline.com/groups/v2/groups/<id>
     data: GroupData
 
 
-class GroupsSchema(_ApiBase):
+class GroupsSchema(ApiBase):
     # schema for https://api.planningcenteronline.com/groups/v2/groups
     data: list[GroupData]
 
@@ -45,7 +45,7 @@ class GroupAttributes(msgspec.Struct, forbid_unknown_fields=True):
 
 # region Membership
 
-class MembershipsSchema(_ApiBase):
+class MembershipsSchema(ApiBase):
     # schema for https://api.planningcenteronline.com/groups/v2/groups/<id>/memberships
     data: list[MembershipData]
 
@@ -70,7 +70,7 @@ class MembershipAttributes(msgspec.Struct, forbid_unknown_fields=True):
 
 # region Events
 
-class EventsSchema(_ApiBase):
+class EventsSchema(ApiBase):
     data: list[EventData]
 
 
@@ -99,7 +99,7 @@ class EventAttributes(msgspec.Struct, forbid_unknown_fields=True):
 # endregion
 
 # region Tags
-class TagsSchema(_ApiBase):
+class TagsSchema(ApiBase):
     data: list[TagData]
 
 
@@ -116,7 +116,7 @@ class TagAttributes(msgspec.Struct, forbid_unknown_fields=True):
 # region People
 
 
-class PeopleSchema(_ApiBase):
+class PeopleSchema(ApiBase):
     # schema for https://api.planningcenteronline.com/groups/v2/groups/<id>/memberships
     data: list[PersonData]
 

@@ -5,7 +5,7 @@ import re
 from datetime import date, datetime
 from enum import Enum
 from urllib.parse import urljoin, urlparse
-from typing import TYPE_CHECKING, Union, Optional, Sequence, Type, Any
+from typing import TYPE_CHECKING, Union, Optional, Type, Any
 
 import msgspec
 import pandas as pd
@@ -15,6 +15,7 @@ from ._exceptions import RequestError
 from ._json_schemas.groups import GroupSchema, GroupsSchema, GroupData, GroupAttributes, MembershipsSchema, \
     MembershipData, EventData, EventsSchema, TagData, TagsSchema, PeopleSchema, PersonV1Data
 from . import _urls as urls
+from .api_provider import ApiProvider
 
 if TYPE_CHECKING:
     # avoid circular import
@@ -91,9 +92,9 @@ class GroupIdentifier:
         return cls(id_=id_)
 
 
-class GroupsApiProvider:
+class GroupsApiProvider(ApiProvider):
     def __init__(self, _backend: PlanningCenterBackend):
-        self._backend = _backend
+        super().__init__(_backend=_backend)
         self.people = PeopleApiProvider(self._backend)
 
     def _check_exists(self, name: str) -> bool:
@@ -135,29 +136,6 @@ class GroupsApiProvider:
         id_ = GroupIdentifier.from_url(group_location)
         return GroupObject(id_=id_, _api=self, _backend=self._backend)
 
-    def _get_raw(self, id_: GroupIdentifier) -> GroupSchema:
-        txt = self._backend.get_json(id_.api_url)
-        return msgspec.json.decode(txt, type=GroupSchema)
-
-    def _get_all_raw(self, url=urls.GROUPS_API_BASE_URL, params=None) -> Sequence[GroupData]:
-        # The groups URL api returns JSON in chunks
-        # For every request, if links contains 'next', that is the URL
-        # of next groups chunk.
-        groups = []
-
-        # Loop all the group chunks while we are pointed to a next URL
-        while url:
-            txt = self._backend.get_json(url, params)
-            section = msgspec.json.decode(txt, type=GroupsSchema)
-            groups.extend(section.data)
-
-            if 'next' in section.links:
-                url = section.links['next']
-            else:
-                url = None
-
-        return groups
-
     def get(self, id_: Union[int, GroupIdentifier]) -> GroupObject:
         """
         Get a specific group access object by id.
@@ -166,18 +144,19 @@ class GroupsApiProvider:
         """
         if isinstance(id_, int):
             id_ = GroupIdentifier.from_id(id_)
-        raw = self._get_raw(id_)
-        return GroupObject(id_=id_, _api=self, _backend=self._backend, _data=raw.data)
+        data = self.query_api(url=id_.api_url, schema=GroupSchema)
+        return GroupObject(id_=id_, _api=self, _backend=self._backend, _data=data)
 
     def query(self, name: Optional[str] = None) -> GroupList:
         params = {}
         if name is not None:
             params['where[name]'] = name
-        groups_raw = self._get_all_raw(params=params)
+        groups_raw = self.query_api(url=urls.GROUPS_API_BASE_URL, params=params, schema=GroupsSchema)
         return GroupList([
             GroupObject(int(g.id), _api=self, _backend=self._backend, _data=g)
             for g in groups_raw
         ])
+
 
 
 _js_re_str = r"""(?xs)
