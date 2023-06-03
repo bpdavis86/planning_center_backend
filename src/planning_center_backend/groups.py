@@ -96,6 +96,13 @@ class GroupsApiProvider:
         self._backend = _backend
         self.people = PeopleApiProvider(self._backend)
 
+    def _check_exists(self, name: str) -> bool:
+        groups = self.query(name)
+        for g in groups:
+            if g.name == name:
+                return True
+        return False
+
     def create(self, name: str, *, group_type: GroupType = GroupType.SmallGroup) -> GroupObject:
         """
         Create a new Planning Center Small Group
@@ -107,6 +114,9 @@ class GroupsApiProvider:
         if not self._backend.logged_in:
             raise ValueError('User is not logged in')
 
+        if self._check_exists(name):
+            raise ValueError(f'Group with name {name} already exists')
+
         # format group creation post request
         data = {
             'group[name]': name,
@@ -115,6 +125,10 @@ class GroupsApiProvider:
         # do group creation
         r = self._backend.post(urls.GROUPS_BASE_URL, data=data, csrf_frontend_url=urls.GROUPS_ROOT_URL)
 
+        if 'Location' not in r.headers:
+            raise ValueError(
+                'Could not get the new group ID from response, perhaps group create failed due to duplicate name'
+            )
         # get the new group uri
         group_location = r.headers['Location']
 
