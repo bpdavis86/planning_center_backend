@@ -103,6 +103,10 @@ class TagsSchema(ApiBase):
     data: list[TagData]
 
 
+class TagSchema(ApiBase):
+    data: TagData
+
+
 class TagData(_DataBase):
     attributes: TagAttributes
 
@@ -134,6 +138,7 @@ class PersonAttributes(msgspec.Struct, forbid_unknown_fields=True):
     email_addresses: list
     permissions: str
     phone_numbers: list
+
 
 # endregion
 
