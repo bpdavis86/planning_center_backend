@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Optional, NamedTuple, Sequence
+from typing import Optional, NamedTuple, Sequence, Union
 from urllib.parse import urljoin
 
 from . import _urls as urls
@@ -42,10 +42,12 @@ class PeopleQueryExpression(NamedTuple):
 class PeopleApiProvider(ApiProvider):
     def query(
             self,
-            expr: PeopleQueryExpression,
+            expr: Union[str, PeopleQueryExpression],
             per_page: Optional[int] = None,
             offset: Optional[int] = None
     ) -> Sequence[PersonData]:
+        if isinstance(expr, str):
+            expr = PeopleQueryExpression(search_name=expr)
         _expr_d = expr._asdict()
         _expr_d_c = _expr_d.copy()
         for k, v in _expr_d_c.items():
