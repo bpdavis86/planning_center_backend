@@ -126,12 +126,12 @@ class PersonData(_DataBase):
 
 
 class PersonAttributes(msgspec.Struct, forbid_unknown_fields=True):
+    first_name: str
+    last_name: str
     addresses: list
     avatar_url: str
     created_at: datetime
     email_addresses: list
-    first_name: str
-    last_name: str
     permissions: str
     phone_numbers: list
 
