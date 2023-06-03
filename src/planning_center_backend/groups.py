@@ -13,6 +13,7 @@ import pandas as pd
 from bs4 import BeautifulSoup
 
 from ._exceptions import RequestError
+from ._groups.people import PeopleApiProvider
 from ._json_schemas.base import ApiBase
 from ._json_schemas.groups import GroupSchema, GroupsSchema, GroupData, GroupAttributes, MembershipsSchema, \
     MembershipData, EventData, EventsSchema, TagData, TagsSchema, PeopleSchema, PersonV1Data
@@ -847,20 +848,3 @@ class GroupList(list[GroupObject]):
         df.insert(0, 'id', pd.Series([g.id_.id_ for g in groups]))
         df.set_index('id')
         return df
-
-
-class PeopleApiProvider(ApiProvider):
-    def query(
-            self,
-            first_name: Optional[str] = None,
-            last_name: Optional[str] = None,
-    ):
-        # Note: this query will only return people who have ever interacted with the group system
-        # i.e. have ever been added to a group and have a group add id associated with them.
-        # We probably want to use the separate people system API to query people ids
-        params = {}
-        if first_name is not None:
-            params['where[first_name]'] = first_name
-        if last_name is not None:
-            params['where[last_name]'] = last_name
-        return self.query_api(urls.GROUPS_PEOPLE_URL, params=params, schema=PeopleSchema)
