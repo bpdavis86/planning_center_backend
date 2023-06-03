@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 import json
@@ -269,6 +270,10 @@ class GroupObject:
         return urljoin(self.id_.frontend_url + '/', 'settings')
 
     @property
+    def members_url(self):
+        return urljoin(self.id_.frontend_url + '/', 'members')
+
+    @property
     def attributes(self) -> Optional[GroupAttributes]:
         if self._deleted:
             return None
@@ -401,18 +406,75 @@ class GroupObject:
             raise RuntimeError('Unexpected API error, ids do not match')
         return data.id
 
-    def add_member(self, person_id: int, leader: bool = False, notify: bool = False):
+    def add_member(self, person_id: Union[str, int], leader: bool = False, notify: bool = False):
+        person_id = int(person_id)
         # A different ID is used when adding member using this API
         add_person_id = self._get_member_add_id(person_id)
 
-        members_url = urljoin(self.frontend_url + '/', 'members')
         data = {
             'membership[person_id]': add_person_id,
             'membership[role]': 'leader' if leader else 'member',
         }
         if notify:
             data['notify_member'] = 1
-        self._backend.post(members_url, data=data, csrf_frontend_url=members_url)
+        self._backend.post(self.members_url, data=data, csrf_frontend_url=self.members_url)
+
+    def get_member(self, person_id: Union[str, int]) -> Optional[MembershipData]:
+        person_id = int(person_id)
+        members = self.memberships
+        this_membership = [m for m in members if int(m.attributes.account_center_identifier) == person_id]
+        if len(this_membership) == 0:
+            return None
+        if len(this_membership) > 1:
+            raise RuntimeError('More than one member matched id, should not occur')
+        this_membership = this_membership[0]
+        return this_membership
+
+    def update_member(
+            self,
+            person_id: Union[str, int],
+            leader: Optional[bool] = None,
+            notify: Optional[bool] = None,
+            attendance_taker: Optional[bool] = None,
+    ):
+        this_membership = self.get_member(person_id)
+        if this_membership is None:
+            raise ValueError('This person is not a member of the group')
+        url = urljoin(self.frontend_url + '/', f'members/{this_membership.id}/role')
+
+        data = {'_method': 'patch', 'utf8': '✓', 'commit': 'Update role'}
+        if leader is not None:
+            data['role'] = 'leader' if leader else 'member'
+        if notify is not None:
+            data['notify_member'] = 1 if notify else 0
+        if attendance_taker is not None:
+            # attendance taker must be joined with member status
+            if not this_membership.attributes.role == 'leader' and 'role' not in data:
+                data['role'] = 'member'
+            if data['role'] == 'member':
+                data['attendance_taker'] = 1 if attendance_taker else 0
+        data['authenticity_token'] = self._backend.get_csrf_token(self.members_url)
+        self._backend.post(url, data=data)
+
+    def delete_member(self, person_id: Union[str, int], notify: bool = False, missing_ok: bool = False):
+        person_id = int(person_id)
+        this_membership = self.get_member(person_id)
+        if this_membership is None:
+            if missing_ok:
+                return
+            else:
+                raise ValueError('This person is not a member of the group')
+
+        # we have to use the same alternative addition id for deletion
+        add_person_id = self._get_member_add_id(person_id)
+        url = urljoin(self.frontend_url + '/', f'members/{this_membership.id}/removal')
+
+        data = {}
+        if notify is not None:
+            data['notify_member'] = 1 if notify else 0
+        data['authenticity_token'] = self._backend.get_csrf_token(self.members_url)
+        data['membership[person_id]'] = add_person_id
+        self._backend.post(url, data=data)
 
     # region Helpers for settings
     def _update_setting(

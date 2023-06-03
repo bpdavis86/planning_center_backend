@@ -63,6 +63,25 @@ class TestGroup:
         test_group.add_tag('Wed', exists_ok=False)
         assert test_group.has_tag('Wed')
 
+    def test_modify_members(self, backend_session, test_group):
+        p = backend_session.people.query('Benjamin Davis')
+        p_id = p[0].id
+        if test_group.get_member(p_id):
+            test_group.delete_member(p_id, missing_ok=True)
+
+        test_group.add_member(p_id, leader=False)
+        member = test_group.get_member(p_id)
+        assert member is not None
+        assert member.attributes.role == 'member'
+
+        test_group.update_member(p_id, leader=True)
+        member = test_group.get_member(p_id)
+        assert member.attributes.role == 'leader'
+
+        test_group.delete_member(p_id)
+        member = test_group.get_member(p_id)
+        assert member is None
+
     def test_name(self, test_group, run_id):
         _property_tester(test_group, 'name', f'Test Name {run_id}')
 
