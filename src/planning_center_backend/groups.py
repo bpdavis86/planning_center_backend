@@ -154,10 +154,10 @@ class GroupsApiProvider(ApiProvider):
             params['where[name]'] = name
         groups_raw = self.query_api(url=urls.GROUPS_API_BASE_URL, params=params, schema=GroupsSchema)
         return GroupList([
-            GroupObject(int(g.id), _api=self, _backend=self._backend, _data=g)
+            # the data should not be passed down here because it's not a full data object
+            GroupObject(int(g.id), _api=self, _backend=self._backend, _data=None)
             for g in groups_raw
         ])
-
 
 
 _js_re_str = r"""(?xs)
@@ -222,7 +222,6 @@ class GroupObject:
         Refresh group attributes from server.
         :return: None
         """
-        print('Refreshing')
         if not self._deleted:
             try:
                 raw = self._api.get(self.id_)
