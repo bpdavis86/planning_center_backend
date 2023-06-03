@@ -10,6 +10,7 @@ GROUPS_ROOT_URL = 'https://groups.planningcenteronline.com'
 GROUPS_BASE_URL = 'https://groups.planningcenteronline.com/groups'
 GROUPS_API_BASE_URL = 'https://api.planningcenteronline.com/groups/v2/groups'
 GROUPS_PEOPLE_URL = 'https://api.planningcenteronline.com/groups/v2/people'
+GROUPS_TAGS_URL = 'https://api.planningcenteronline.com/groups/v2/tags'
 GROUPS_PEOPLE_V1_BASE = 'https://groups.planningcenteronline.com/api/v1/people'
 
 

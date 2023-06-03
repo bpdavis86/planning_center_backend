@@ -1,4 +1,5 @@
 from datetime import date, timedelta
+from typing import Optional
 
 import pytest
 from planning_center_backend import planning_center
@@ -37,13 +38,13 @@ class TestGroup:
         assert not test_group.deleted
 
     def test_memberships(self, test_group):
-        assert test_group.memberships
+        _ = test_group.memberships
 
     def test_events(self, test_group):
-        assert test_group.events
+        _ = test_group.events
 
     def test_tags(self, test_group):
-        assert test_group.tags
+        _ = test_group.tags
 
     def test_name(self, test_group, run_id):
         _property_tester(test_group, 'name', f'Test Name {run_id}')
@@ -143,3 +144,15 @@ class TestGroup:
     @pytest.mark.parametrize('value', [True, False])
     def test_leaders_can_search_people_database(self, test_group, value):
         _property_tester(test_group, 'leaders_can_search_people_database', value)
+
+
+class TestTags:
+    @pytest.mark.parametrize('name', [None, 'madison'])
+    def test_query(self, backend_session: planning_center.PlanningCenterBackend, name: Optional[str]):
+        tags = backend_session.groups.tags.query(name)
+        assert tags
+
+    def test_get(self, backend_session: planning_center.PlanningCenterBackend):
+        tags = backend_session.groups.tags.query('Madison')
+        tag = backend_session.groups.tags.get(tags[0].id)
+        assert tag.id == tags[0].id

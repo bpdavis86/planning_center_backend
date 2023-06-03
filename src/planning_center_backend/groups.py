@@ -100,6 +100,7 @@ class GroupsApiProvider(ApiProvider):
     def __init__(self, _backend: PlanningCenterBackend):
         super().__init__(_backend=_backend)
         self.people = GroupsPeopleApiProvider(self._backend)
+        self.tags = TagsApiProvider(self._backend)
 
     def _check_exists(self, name: str) -> bool:
         groups = self.query(name)
