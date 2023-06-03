@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from contextlib import contextmanager
 from datetime import date, datetime
 from enum import Enum
 from urllib.parse import urljoin, urlparse
@@ -194,12 +195,34 @@ class GroupObject:
 
         self._deleted = False
         self._settings_soup = None
+        self.auto_refresh = True
+
+    @contextmanager
+    def no_refresh(self, refresh_at_exit=True):
+        """
+        Context manager to temporarily disable auto-refresh.
+        This is useful if one wishes to efficiently modify multiple settings at once.
+        :return: Current group object
+        """
+        old_status = self.auto_refresh
+        self.auto_refresh = False
+        try:
+            yield self
+        finally:
+            self.auto_refresh = old_status
+        if refresh_at_exit:
+            self.refresh()
+
+    def _auto_refresh(self):
+        if self.auto_refresh:
+            self.refresh()
 
     def refresh(self) -> None:
         """
         Refresh group attributes from server.
         :return: None
         """
+        print('Refreshing')
         if not self._deleted:
             try:
                 raw = self._api.get(self.id_)
@@ -273,7 +296,7 @@ class GroupObject:
         """
         self._backend.delete(self.frontend_url, csrf_frontend_url=self.settings_url)
 
-        self.refresh()
+        self._auto_refresh()
         return self.deleted
 
     def _get_link_with_schema(self, link_name: str, schema_type: Type[msgspec.Struct]):
@@ -349,7 +372,7 @@ class GroupObject:
             data={**data, **_request_base},
             csrf_frontend_url=self.settings_url
         )
-        self.refresh()
+        self._auto_refresh()
 
     def _get_ui_checkbox_status(self, name: str) -> bool:
         soup = self._get_settings_soup()
