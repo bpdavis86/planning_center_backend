@@ -9,9 +9,21 @@ import planning_center_backend.groups
 from planning_center_backend import planning_center
 
 
+def _get_keyring_credential(name, kind):
+    cred = keyring.get_credential(name, None)
+    if cred is None:
+        raise ValueError(f'Please configure your {kind} in keyring under credential name "{name}"')
+    return cred
+
+
 @pytest.fixture(scope="session")
 def credentials() -> keyring.credentials.Credential:
-    return keyring.get_credential('planningcenteronline.com', None)
+    return _get_keyring_credential('planningcenteronline.com', 'Planning Center Login')
+
+
+@pytest.fixture(scope="session")
+def maps_api_key() -> str:
+    return _get_keyring_credential('maps-api:https://maps.googleapis.com', 'Google Maps API key').password
 
 
 @pytest.fixture(scope="session")
