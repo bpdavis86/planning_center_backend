@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, Union, Mapping, Any, Sequence, Tuple
 
 import requests
 from bs4 import BeautifulSoup
@@ -154,7 +154,7 @@ class PlanningCenterBackend:
     def post(
             self,
             url: str,
-            data: dict,
+            data: Union[Mapping[str, Any], Sequence[Tuple[str, Optional[str]]]],
             *,
             csrf_frontend_url: Optional[str] = None,
             csrf_no_cache: bool = False,
