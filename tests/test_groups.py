@@ -5,6 +5,7 @@ import pytest
 from planning_center_backend import planning_center
 from planning_center_backend.groups import GroupType, GroupEnrollment, GroupLocationType, GroupEventsVisibility, \
     GroupObject
+from planning_center_backend.maps import Maps
 
 
 def test_get(backend_session: planning_center.PlanningCenterBackend, test_group_id: int):
@@ -192,3 +193,68 @@ class TestTags:
         tags = backend_session.groups.tags.query('Madison')
         tag = backend_session.groups.tags.get(tags[0].id)
         assert tag.id == tags[0].id
+
+
+@pytest.fixture(scope='module')
+def test_geocode(maps_api_key):
+    # get the geocode data from the maps API
+    maps = Maps(maps_api_key)
+    places = maps.find_place_from_text('1100 Mid City Dr, 35806')
+    assert len(places) == 1
+    place_id = places[0].place_id
+    geocodes = maps.geocode_from_place_id(place_id)
+    assert len(geocodes) == 1
+    geocode = geocodes[0]
+    return geocode
+
+
+class TestLocations:
+    def test_add_delete_geocode(self, test_geocode, run_id, test_group):
+        name = f"Trader Joe's Test {run_id}"
+        loc_id = test_group.locations.create(
+            name=name,
+            geocode_data=test_geocode
+        )
+
+        # query the locations to see if it got added
+        locations = test_group.locations.query()
+
+        # go ahead and delete, and we'll verify it was added after
+        test_group.locations.delete(loc_id)
+
+        my_location = [e for e in locations if e.id == loc_id]
+        assert len(my_location) == 1
+        my_location = my_location[0]
+        assert my_location.name == name
+        assert not my_location.custom
+
+        # query the locations to see if it got deleted
+        locations = test_group.locations.query()
+        my_location = [e for e in locations if e.id == loc_id]
+        assert len(my_location) == 0
+
+    def test_add_delete_custom(self, run_id, test_group):
+        name = f"Trader Joe's Test {run_id} Custom"
+        loc_id = test_group.locations.create_custom(
+            name=name,
+            formatted_address='1100 Mid City Dr, Huntsville, AL 35806',
+            latitude=34.74083084210602,
+            longitude=-86.66396098408326,
+        )
+
+        # query the locations to see if it got added
+        locations = test_group.locations.query()
+
+        # go ahead and delete, and we'll verify it was added after
+        test_group.locations.delete(loc_id)
+
+        my_location = [e for e in locations if e.id == loc_id]
+        assert len(my_location) == 1
+        my_location = my_location[0]
+        assert my_location.name == name
+        assert my_location.custom
+
+        # query the locations to see if it got deleted
+        locations = test_group.locations.query()
+        my_location = [e for e in locations if e.id == loc_id]
+        assert len(my_location) == 0
