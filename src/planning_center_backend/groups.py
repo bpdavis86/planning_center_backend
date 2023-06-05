@@ -14,6 +14,8 @@ import pandas as pd
 from bs4 import BeautifulSoup
 
 from ._exceptions import RequestError
+# from ._groups.locations import LocationsApiProvider
+from ._groups.locations_v1 import LocationV1ApiProvider
 from ._groups.people import GroupsPeopleApiProvider
 from ._groups.tags import TagsApiProvider
 from ._json_schemas.base import ApiBase
@@ -102,6 +104,9 @@ class GroupsApiProvider(ApiProvider):
         super().__init__(_backend=_backend)
         self.people = GroupsPeopleApiProvider(self._backend)
         self.tags = TagsApiProvider(self._backend)
+        # for now, disable the v2 API because it can return ids which are not available for this group
+        # the per-group v1 api endpoint should be used instead (i.e. GroupObject.locations)
+        # self.locations = LocationsApiProvider(self._backend)
 
     def _check_exists(self, name: str) -> bool:
         groups = self.query(name)
@@ -203,6 +208,8 @@ class GroupObject:
         self._deleted = False
         self._settings_soup = None
         self.auto_refresh = True
+
+        self.locations = LocationV1ApiProvider(_backend, self.id_.id_)
 
     @contextmanager
     def no_refresh(self, refresh_at_exit=True):
@@ -768,6 +775,7 @@ class GroupObject:
 
     @location_id.setter
     def location_id(self, value: Optional[int]):
+        # Note - only location IDs in the v1 API seem to be valid here
         self._update_setting(
             {'group[location_id]': value if value is not None else ''},
             patch=True, autosave=True

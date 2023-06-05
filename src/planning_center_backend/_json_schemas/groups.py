@@ -6,6 +6,7 @@ from typing import Optional
 import msgspec
 
 from .base import ApiBase, _DataBase
+from ..maps import LatLong
 
 
 # region Groups
@@ -142,6 +143,27 @@ class PersonAttributes(msgspec.Struct, forbid_unknown_fields=True):
 
 # endregion
 
+# region Locations
+
+class LocationsSchema(ApiBase):
+    data: list[LocationData]
+
+
+class LocationData(_DataBase):
+    attributes: LocationAttributes
+
+
+class LocationAttributes(msgspec.Struct, forbid_unknown_fields=True):
+    name: str
+    full_formatted_address: str
+    latitude: str
+    longitude: str
+    display_preference: str
+    radius: int
+    strategy: str
+
+# endregion
+
 
 # region People v1
 
@@ -150,5 +172,43 @@ class PersonV1Data(msgspec.Struct):
     id: int
     account_center_id: int
     # the rest of the fields we don't care about for now
+
+# endregion
+
+
+# region Locations v1
+
+class LocationV1Response(msgspec.Struct):
+    locations: list[LocationV1Data]
+    id: Optional[int] = None
+    # ignore others
+
+
+class LocationV1Data(msgspec.Struct):
+    id: int
+    name: str
+    display_preference: str
+    latitude: str
+    longitude: str
+    group_id: Optional[int]
+    subpremise: Optional[str]
+    full_formatted_address: str
+    formatted_address: str
+    approximation: LocationV1Approximation
+    group_count: int
+    upcoming_event_count: int
+    custom: bool
+    permissions: LocationV1Permissions
+
+
+class LocationV1Approximation(msgspec.Struct):
+    center: LatLong
+    radius: int
+
+
+class LocationV1Permissions(msgspec.Struct):
+    can_destroy: bool
+    can_share: bool
+    can_update: bool
 
 # endregion
