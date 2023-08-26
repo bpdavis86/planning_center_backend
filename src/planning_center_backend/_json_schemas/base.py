@@ -8,6 +8,9 @@ import msgspec
 
 
 class ApiBase(msgspec.Struct):
+    """
+    Base object for all API query returns.
+    """
     data: Any
     included: list
     meta: dict
@@ -15,6 +18,9 @@ class ApiBase(msgspec.Struct):
 
 
 class _DataBase(msgspec.Struct, forbid_unknown_fields=True):
+    """
+    Base class for API 'data' field contents (generic attributes dict).
+    """
     type: str
     id: str
     attributes: dict

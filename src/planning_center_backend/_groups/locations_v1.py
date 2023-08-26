@@ -17,6 +17,11 @@ class DisplayPreference(Enum):
 
 
 class LocationV1ApiProvider(ApiProvider):
+    """
+    Provide API v1 access to registered location settings.
+
+    This API is currently preferred for setup of new locations because the v2 API does not have set access.
+    """
     def __init__(self, _backend, _group_id: int):
         super().__init__(_backend)
         self._group_id = _group_id

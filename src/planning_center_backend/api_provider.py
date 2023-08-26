@@ -12,6 +12,10 @@ if TYPE_CHECKING:
 
 
 class ApiProvider:
+    """
+    Base class for all v2 API queries.
+    Child classes should implement their own methods using the query_api method to drive the query.
+    """
     def __init__(self, _backend: PlanningCenterBackend):
         self._backend = _backend
 
@@ -25,8 +29,8 @@ class ApiProvider:
         """
         Handle queries to the Planning Center API, including multi-record chunked results.
 
-        Return value is either schema.data (for scalar query)
-        or concatenation of schema.data over chunks (for multi-record query)
+        Return value is either `schema.data` (for scalar query)
+        or concatenation of `schema.data` over chunks (for multi-record query)
 
         :param url: API URL to query
         :param params: HTTP GET parameters for query

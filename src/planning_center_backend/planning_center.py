@@ -105,7 +105,7 @@ class PlanningCenterBackend:
 
         :param username: Username for login
         :param password: Password for login
-        :return: Response object resulting from login post
+        :return: Status of login request (true if successful)
         """
         # Get the needed authenticity token from the frontend
         authenticity_token = self._get_authenticity_token(urls.LOGIN_NEW_URL)
