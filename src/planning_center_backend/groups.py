@@ -111,7 +111,8 @@ class GroupsApiProvider(ApiProvider):
     def _check_exists(self, name: str) -> bool:
         groups = self.query(name)
         for g in groups:
-            if g.name == name:
+            # Group names have case-insensitive overlap
+            if g.name.lower() == name.lower():
                 return True
         return False
 
