@@ -130,14 +130,17 @@ class TestGroup:
         _property_tester(test_group, 'location_type_preference', value)
 
     @pytest.mark.parametrize('value', [
-        None,  # (no location)
+        # The ability to set (no location) appears to have been removed
+        # It will appear to be successful on the settings page but will return to existing setting on refresh
+        # None,  # (no location)
         797809  # Davis Home
     ])
     def test_location_id(self, test_group, value):
         _property_tester(test_group, 'location_id', value)
 
     def test_virtual_location_url(self, test_group, run_id):
-        _property_tester(test_group, 'virtual_location_url', f'http://testurl{run_id}.foo.com')
+        # The website automatically adds a trailing / to the URL if none is given
+        _property_tester(test_group, 'virtual_location_url', rf'http://testurl{run_id}.foo.com/')
 
     @pytest.mark.parametrize('value', [GroupEventsVisibility.Public, GroupEventsVisibility.Members])
     def test_events_visibility(self, test_group, value):
