@@ -132,7 +132,7 @@ class PlanningCenterBackend:
     def logout(self):
         if not self.logged_in:
             return
-        r = self._session.get(urls.LOGOUT_URL)
+        r = self._session.post(urls.LOGOUT_URL, {})
         success = not self.logged_in
         if success:
             self._username = None
