@@ -40,6 +40,7 @@ class GroupAttributes(msgspec.Struct, forbid_unknown_fields=True):
     header_image: dict
     archived_at: Optional[datetime] = None
     virtual_location_url: Optional[str] = None
+    leaders_can_search_people_database: Optional[bool] = None
 
 
 # endregion

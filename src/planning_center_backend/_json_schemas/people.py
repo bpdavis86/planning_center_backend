@@ -51,6 +51,7 @@ class PersonAttributes(msgspec.Struct, forbid_unknown_fields=True):
     passed_background_check: bool
     people_permissions: Optional[str]
     remote_id: Optional[int]
+    resource_permission_flags: Optional[dict]
     school_type: Optional[str]
     site_administrator: bool
     updated_at: Optional[datetime]
