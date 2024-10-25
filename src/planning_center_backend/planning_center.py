@@ -151,6 +151,46 @@ class PlanningCenterBackend:
             raise RequestError(f'Could not get JSON content at {url}', response=r)
         return r.text
 
+    def get(
+            self,
+            url: str,
+            headers: Optional[dict] = None,
+            *,
+            csrf_frontend_url: Optional[str] = None,
+            csrf_no_cache: bool = False,
+            csrf_auto_retry: bool = True,
+    ) -> requests.Response:
+        if headers is None:
+            headers = {}
+
+        if csrf_frontend_url is not None:
+            csrf_token = self.get_csrf_token(csrf_frontend_url, no_cache=csrf_no_cache)
+            headers_final = _get_csrf_headers(csrf_token)
+            headers_final.update(headers)
+            r = self._session.get(
+                url,
+                headers=headers_final
+            )
+            if not r.ok and not csrf_no_cache and csrf_auto_retry:
+                # retry request after expiring cached token
+                csrf_token = self.get_csrf_token(csrf_frontend_url, force_refresh=True)
+                headers_final = _get_csrf_headers(csrf_token)
+                headers_final.update(headers)
+                r = self._session.get(
+                    url,
+                    headers=headers_final
+                )
+        else:
+            r = self._session.get(
+                url,
+            )
+
+        # check result
+        if not r.ok:
+            raise RequestError(f'Get of {url} failed, Response {r.status_code}', response=r)
+
+        return r
+
     def post(
             self,
             url: str,
