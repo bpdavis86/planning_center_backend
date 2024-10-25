@@ -1,18 +1,20 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+import collections.abc
 import json
 import re
 from contextlib import contextmanager
-from datetime import date, datetime
+from datetime import date, datetime, time
 from enum import Enum
+from typing import TYPE_CHECKING, Union, Optional, Type, Any, NamedTuple, FrozenSet, Mapping, Sequence, Tuple
 from urllib.parse import urljoin, urlparse
-from typing import TYPE_CHECKING, Union, Optional, Type, Any
 
 import msgspec
 import pandas as pd
 from bs4 import BeautifulSoup
 
+from . import _urls as urls
 from ._exceptions import RequestError
 # from ._groups.locations import LocationsApiProvider
 from ._groups.locations_v1 import LocationV1ApiProvider
@@ -21,13 +23,11 @@ from ._groups.tags import TagsApiProvider
 from ._json_schemas.base import ApiBase
 from ._json_schemas.groups import GroupSchema, GroupsSchema, GroupData, GroupAttributes, MembershipsSchema, \
     MembershipData, EventData, EventsSchema, TagData, TagsSchema, PersonV1Data
-from . import _urls as urls
 from .api_provider import ApiProvider
 
 if TYPE_CHECKING:
     # avoid circular import
     from .planning_center import PlanningCenterBackend
-
 
 __all__ = [
     'GroupType',
@@ -62,6 +62,199 @@ class GroupLocationType(Enum):
 class GroupEventsVisibility(Enum):
     Members = 'members'
     Public = 'public'
+
+
+class GroupMeetingScheduleFrequency(Enum):
+    Weekly = 'weekly'
+    Biweekly = 'biweekly'
+    MonthlyOnWeekday = 'monthly_on_weekday'
+    MonthlyOnDay = 'monthly_on_day'
+    Yearly = 'yearly'
+
+
+class GroupMeetingWeekday(Enum):
+    Sunday = 0
+    Monday = 1
+    Tuesday = 2
+    Wednesday = 3
+    Thursday = 4
+    Friday = 5
+    Saturday = 6
+
+
+class GroupMeetingMonthWeek(Enum):
+    First = 1
+    Second = 2
+    Third = 3
+    Fourth = 4
+    Fifth = 5
+    Last = -1
+
+
+class GroupMeetingSettings(NamedTuple):
+    frequency: GroupMeetingScheduleFrequency
+    params: Any
+    start_time: time
+    end_time: time
+
+    @classmethod
+    def parse(cls, json_dict: dict[str, Any]) -> GroupMeetingSettings:
+        frequency = GroupMeetingScheduleFrequency(json_dict['initialFrequency']['name'])
+        start_time = datetime.fromisoformat(json_dict['initialStartTime']).time()
+        end_time = datetime.fromisoformat(json_dict['initialEndTime']).time()
+        if frequency in [GroupMeetingScheduleFrequency.Weekly, GroupMeetingScheduleFrequency.Biweekly]:
+            params = GroupMeetingWeeklyParams.parse(json_dict)
+        elif frequency == GroupMeetingScheduleFrequency.MonthlyOnWeekday:
+            params = GroupMeetingMonthlyOnWeekdayParams.parse(json_dict)
+        elif frequency == GroupMeetingScheduleFrequency.MonthlyOnDay:
+            params = GroupMeetingMonthlyOnDayParams.parse(json_dict)
+        elif frequency == GroupMeetingScheduleFrequency.Yearly:
+            params = GroupMeetingYearlyParams.parse(json_dict)
+        else:
+            raise ValueError(f'Unrecognized group meeting frequency {frequency}')
+        return GroupMeetingSettings(
+            frequency=frequency,
+            params=params,
+            start_time=start_time,
+            end_time=end_time
+        )
+
+    def render(self) -> Sequence[Tuple[str, Optional[str]]]:
+        out = [('meeting_schedule[frequency][name]', self.frequency.value)]
+        out.extend(self.params.render())
+        now_date = datetime.now().date()
+        out.append(('meeting_schedule[start_time]', datetime.combine(now_date, self.start_time).isoformat()))
+        out.append(('meeting_schedule[end_time]', datetime.combine(now_date, self.end_time).isoformat()))
+        return out
+
+    @classmethod
+    def weekly(cls, weekday: GroupMeetingWeekday, start_time: time, end_time: time) -> GroupMeetingSettings:
+        params = GroupMeetingWeeklyParams(weekday)
+        return GroupMeetingSettings(
+            frequency=GroupMeetingScheduleFrequency.Weekly,
+            params=params,
+            start_time=start_time,
+            end_time=end_time
+        )
+
+    @classmethod
+    def biweekly(cls, weekday: GroupMeetingWeekday, start_time: time, end_time: time) -> GroupMeetingSettings:
+        params = GroupMeetingWeeklyParams(weekday)
+        return GroupMeetingSettings(
+            frequency=GroupMeetingScheduleFrequency.Biweekly,
+            params=params,
+            start_time=start_time,
+            end_time=end_time
+        )
+
+    @classmethod
+    def monthly_on_weekday(
+            cls,
+            weekday: GroupMeetingWeekday,
+            week_count: FrozenSet[GroupMeetingMonthWeek],
+            start_time: time,
+            end_time: time
+    ) -> GroupMeetingSettings:
+        params = GroupMeetingMonthlyOnWeekdayParams(weekday=weekday, week_count=week_count)
+        return GroupMeetingSettings(
+            frequency=GroupMeetingScheduleFrequency.MonthlyOnWeekday,
+            params=params,
+            start_time=start_time,
+            end_time=end_time
+        )
+
+    @classmethod
+    def monthly_on_day(
+            cls,
+            day: int,
+            start_time: time,
+            end_time: time
+    ) -> GroupMeetingSettings:
+        params = GroupMeetingMonthlyOnDayParams(day)
+        return GroupMeetingSettings(
+            frequency=GroupMeetingScheduleFrequency.MonthlyOnDay,
+            params=params,
+            start_time=start_time,
+            end_time=end_time
+        )
+
+    @classmethod
+    def yearly(
+            cls,
+            month: int,
+            day: int,
+            start_time: time,
+            end_time: time
+    ) -> GroupMeetingSettings:
+        params = GroupMeetingYearlyParams(day=day, month=month)
+        return GroupMeetingSettings(
+            frequency=GroupMeetingScheduleFrequency.Yearly,
+            params=params,
+            start_time=start_time,
+            end_time=end_time
+        )
+
+
+class GroupMeetingWeeklyParams(NamedTuple):
+    weekday: GroupMeetingWeekday
+
+    @classmethod
+    def parse(cls, json_dict: dict[str, Any]) -> GroupMeetingWeeklyParams:
+        weekday = GroupMeetingWeekday(int(json_dict['initialFrequency']['weekday']))
+        return GroupMeetingWeeklyParams(weekday)
+
+    def render(self) -> Sequence[Tuple[str, Optional[str]]]:
+        out = [('meeting_schedule[frequency][weekday]', str(self.weekday.value))]
+        return out
+
+
+class GroupMeetingMonthlyOnWeekdayParams(NamedTuple):
+    week_count: FrozenSet[GroupMeetingMonthWeek]
+    weekday: GroupMeetingWeekday
+
+    @classmethod
+    def parse(cls, json_dict: dict[str, Any]) -> GroupMeetingMonthlyOnWeekdayParams:
+        weekday = GroupMeetingWeekday(int(json_dict['initialFrequency']['weekday']))
+        week_count_json = json_dict['initialFrequency']['weekCount']
+        week_count = frozenset([GroupMeetingMonthWeek(int(c)) for c in week_count_json])
+        return GroupMeetingMonthlyOnWeekdayParams(week_count=week_count, weekday=weekday)
+
+    def render(self) -> Sequence[Tuple[str, Optional[str]]]:
+        out = [
+            ('meeting_schedule[frequency][week_count][]', str(wc.value))
+            for wc in self.week_count
+        ]
+        out.append(('meeting_schedule[frequency][weekday]', str(self.weekday.value)))
+        return out
+
+
+class GroupMeetingMonthlyOnDayParams(NamedTuple):
+    day: int
+
+    @classmethod
+    def parse(cls, json_dict: dict[str, Any]) -> GroupMeetingMonthlyOnDayParams:
+        day = int(json_dict['initialFrequency']['day'])
+        return GroupMeetingMonthlyOnDayParams(day)
+
+    def render(self) -> Sequence[Tuple[str, Optional[str]]]:
+        return [('meeting_schedule[frequency][day]', str(self.day))]
+
+
+class GroupMeetingYearlyParams(NamedTuple):
+    month: int
+    day: int
+
+    @classmethod
+    def parse(cls, json_dict: dict[str, Any]) -> GroupMeetingYearlyParams:
+        day = int(json_dict['initialFrequency']['day'])
+        month = int(json_dict['initialFrequency']['month'])
+        return GroupMeetingYearlyParams(day=day, month=month)
+
+    def render(self) -> Sequence[Tuple[str, Optional[str]]]:
+        return [
+            ('meeting_schedule[frequency][month]', str(self.month)),
+            ('meeting_schedule[frequency][day]', str(self.day))
+        ]
 
 
 class GroupIdentifier:
@@ -487,7 +680,7 @@ class GroupObject:
     # region Helpers for settings
     def _update_setting(
             self,
-            data: dict[str, Any],
+            data: Union[Mapping[str, Any], Sequence[Tuple[str, Optional[str]]]],
             *,
             url: Optional[str] = None,
             patch: bool = False,
@@ -505,9 +698,16 @@ class GroupObject:
         if url is None:
             url = self.settings_url
 
+        if isinstance(data, collections.abc.Mapping):
+            final_data = {**data, **_request_base}
+        else:
+            final_data = list(data)
+            for k, v in _request_base.items():
+                final_data.append((k, v))
+
         self._backend.post(
             url,
-            data={**data, **_request_base},
+            data=final_data,
             csrf_frontend_url=self.settings_url
         )
         self._auto_refresh()
@@ -544,13 +744,14 @@ class GroupObject:
 
         return selected['value']
 
-    def _get_settings_data_react_props(self):
+    def _get_settings_data_react_props(self, soup: Optional[BeautifulSoup] = None):
         # Some of the settings have to be loaded directly from the settings frontend
         # Some of these are embedded in react class property JSON strings
         # Get the embedded React class parameters
         # This is likely to break as the frontend evolves
 
-        soup = self._get_settings_soup()
+        if soup is None:
+            soup = self._get_settings_soup()
         react_elements = soup.find_all(attrs={'data-react-class': 'AppProvider'})
         return [
             json.loads(e.attrs['data-react-props'])
@@ -969,6 +1170,59 @@ class GroupObject:
             {'group[leaders_can_search_people_database]': int(value)},
             put=True, autosave=True
         )
+
+    @property
+    def is_schedule_created(self) -> bool:
+        # FRAGILE - derived from UI due to lack of API access
+        soup = self._get_settings_soup()
+        link = soup.find('a', href=re.compile(r'groups/\d+/meeting_schedule'))
+        if link is None:
+            raise RuntimeError('Could not find new or edit schedule link, check for UI changes')
+        href = link.get_attribute_list('href')[0]
+        parts = href.split('/')
+        if parts[-1] == 'edit':
+            return True
+        elif parts[-1] == 'new':
+            return False
+        else:
+            raise RuntimeError('Schedule link is not in expected format, check for UI changes')
+
+    @property
+    def schedule_parameters(self) -> Optional[GroupMeetingSettings]:
+        if not self.is_schedule_created:
+            return None
+        # load the "Edit meeting schedule" popup page (which is JS code)
+        edit_url = urljoin(self.id_.frontend_url + '/', 'meeting_schedule/edit')
+        r = self._backend.get(
+            edit_url,
+            # for some reason text/javascript was not sufficient to get this to work
+            headers={'Accept': '*/*;q=0.5'},
+            csrf_frontend_url=self.settings_url
+        )
+        # This is a script which renders a dialog with specific HTML content.
+        # We want to read out the current parameters from the rendering code.
+        text = r.content.decode('utf8')
+        # get the HTML to be rendered
+        m = re.search(r'application.renderModal\("(.+)"\);', text)
+        text_html_escaped = m.groups()[0]
+        # Remove JS escaping layer
+        text_html = text_html_escaped.replace(r'\n', '\n').replace(r'\"', '"').replace(r"\/", "/")
+        # Decode HTML
+        soup = BeautifulSoup(text_html, 'html.parser')
+        json_dict = self._get_settings_data_react_props(soup)[0]
+        return GroupMeetingSettings.parse(json_dict)
+
+    @schedule_parameters.setter
+    def schedule_parameters(self, params: Optional[GroupMeetingSettings]):
+        meeting_url = urljoin(self.id_.frontend_url + '/', 'meeting_schedule')
+        if params is None:
+            self._backend.delete(meeting_url, csrf_frontend_url=self.frontend_url)
+            self._auto_refresh()
+            return
+        authenticity_token = self._backend.get_csrf_token(self.frontend_url)
+        data = [('authenticity_token', authenticity_token), ('utf8', '✓')]
+        data.extend(params.render())
+        self._update_setting(data, url=meeting_url, put=True)
 
     # endregion
 

@@ -5,7 +5,9 @@ import pytest
 from planning_center_backend import planning_center
 from planning_center_backend.groups import GroupType, GroupEnrollment, GroupLocationType, GroupEventsVisibility, \
     GroupObject
+from planning_center_backend import groups
 from planning_center_backend.maps import Maps
+from datetime import time
 
 
 def test_get(backend_session: planning_center.PlanningCenterBackend, test_group_id: int):
@@ -184,6 +186,50 @@ class TestGroup:
     @pytest.mark.parametrize('value', [True, False])
     def test_leaders_can_search_people_database(self, test_group, value):
         _property_tester(test_group, 'leaders_can_search_people_database', value)
+
+    @pytest.mark.parametrize('value', [
+        pytest.param(
+            groups.GroupMeetingSettings.weekly(
+                groups.GroupMeetingWeekday.Wednesday, time(13, 00), time(15, 00)
+            ), id='weekly'
+        ),
+        pytest.param(
+            groups.GroupMeetingSettings.biweekly(
+                groups.GroupMeetingWeekday.Wednesday, time(14, 30), time(16, 15)
+            ), id='biweekly'
+        ),
+        pytest.param(
+            groups.GroupMeetingSettings.monthly_on_weekday(
+                groups.GroupMeetingWeekday.Thursday,
+                frozenset({groups.GroupMeetingMonthWeek.First, groups.GroupMeetingMonthWeek.Last}),
+                time(8, 30), time(9, 15)
+            ), id='monthly_on_weekday'
+        ),
+        pytest.param(
+            groups.GroupMeetingSettings.monthly_on_day(
+                15, time(14, 30), time(16, 15)
+            ), id='monthly_on_day'
+        ),
+        pytest.param(
+            groups.GroupMeetingSettings.yearly(
+                9, 30, time(14, 30), time(16, 15)
+            ), id='yearly'
+        )
+    ])
+    def test_schedule_parameters(self, test_group, value: groups.GroupMeetingSettings):
+        if test_group.is_schedule_created:
+            test_group.schedule_parameters = None
+            assert not test_group.is_schedule_created
+
+        test_group.schedule_parameters = value
+        assert test_group.is_schedule_created
+
+        value_read = test_group.schedule_parameters
+        assert value_read.frequency == value.frequency
+        for e, a in zip(value.params, value_read.params):
+            assert e == a
+        assert value_read.start_time == value.start_time
+        assert value_read.end_time == value.end_time
 
 
 class TestTags:
