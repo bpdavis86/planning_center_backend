@@ -55,3 +55,4 @@ class PersonAttributes(msgspec.Struct, forbid_unknown_fields=True):
     school_type: Optional[str]
     site_administrator: bool
     updated_at: Optional[datetime]
+    login_identifier: Optional[str]
